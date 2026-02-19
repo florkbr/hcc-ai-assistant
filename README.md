@@ -1,36 +1,31 @@
 # AI Assistant Service
 
-HTTP-based AI assistant service using LightSpeed stack.
+HTTP-based AI assistant service using LightSpeed stack with Google Vertex AI.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-make install
+# Copy environment template
+cp .env.example .env
 
-# Install with development dependencies
-make install-dev
+# Edit .env with your values:
+# VERTEX_PROJECT=your-project-id
+# VERTEX_LOCATION=your-location
+# ALLOWED_MODEL=your-model-name
+# GOOGLE_API_KEY=your-api-key
 
-# Run the application
-make run
-
-# Run in development mode with auto-reload
-make dev
+# Start services
+docker compose up
 ```
 
-## Available Commands
+The service will be available at:
+- **LightSpeed Stack**: http://localhost:8080
 
-- `make install` - Install production dependencies
-- `make install-dev` - Install with development dependencies
-- `make run` - Run the application
-- `make dev` - Run with uvicorn in development mode
-- `make test` - Run tests
-- `make clean` - Clean build artifacts
-- `make lint` - Lint code
-- `make format` - Format code
-- `make help` - Show all available commands
+## Configuration
 
-## Services
+### Required Environment Variables
 
-- **Main Service**: Port 8000 (LightSpeed stack)
-- **Metrics Server**: Port 9000 (Prometheus metrics)
+- `VERTEX_PROJECT` - Google Cloud project ID
+- `VERTEX_LOCATION` - Vertex AI location
+- `ALLOWED_MODEL` - Model name (e.g., "gemini-2.5-flash")
+- `GOOGLE_API_KEY` - Google Cloud API key

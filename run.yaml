@@ -32,7 +32,7 @@ providers:
       metadata_store:
         table_name: files_metadata
         backend: sql_default
-      storage_dir: /Users/martin/.llama/storage/files
+      storage_dir: ${env.STORAGE_DIR}
     provider_id: meta-reference-files
     provider_type: inline::localfs
   safety:
@@ -112,10 +112,10 @@ storage:
   backends:
     kv_default: # Define the storage backend type for RAG, in this case registry and RAG are unified i.e. information on registered resources (e.g. models, vector_stores) are saved together with the RAG chunks
       type: kv_sqlite
-      db_path: ${env.KV_STORE_PATH:=/Users/martin/.llama/storage/rag/kv_store.db}
+      db_path: ${env.KV_STORE_PATH}
     sql_default:
       type: sql_sqlite
-      db_path: ${env.SQL_STORE_PATH:=/Users/martin/.llama/storage/sql_store.db}
+      db_path: ${env.SQL_STORE_PATH}
   stores:
     metadata:
       namespace: registry

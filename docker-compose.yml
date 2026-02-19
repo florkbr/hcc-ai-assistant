@@ -1,0 +1,23 @@
+  # docker-compose.yml
+  version: '3.8'
+
+  services:
+    lightspeed-stack:
+      image: quay.io/lightspeed-core/lightspeed-stack:latest
+      ports:
+        - "8080:8080"  # Main API
+      environment:
+        - VERTEX_PROJECT=${VERTEX_PROJECT}
+        - VERTEX_LOCATION=${VERTEX_LOCATION}
+        - ALLOWED_MODEL=${ALLOWED_MODEL}
+        - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+        - GOOGLE_CLOUD_PROJECT=${VERTEX_PROJECT}
+        - LIGHTSPEED_STACK_CONFIG_PATH=/app-root/lightspeed-stack.yaml
+        - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
+        - KV_STORE_PATH=/app-root/.llama/storage/rag/kv_store.db
+        - SQL_STORE_PATH=/app-root/.llama/storage/sql_store.db
+        - STORAGE_DIR=/app-root/.llama/storage/files
+      volumes:
+        - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:Z
+        - ./run.yaml:/app-root/run.yaml:Z
+        - ./service-account-key.json:/app/service-account-key.json:ro
