@@ -26,29 +26,227 @@ objects:
               apiPath: hcc-ai-assistant
               enabled: true
         podSpec:
-          image: ${IMAGE}:${IMAGE_TAG}
+          # Define volumes at pod level (shared across all containers)
+          volumes:
+            - name: chromadb-data
+              persistentVolumeClaim:
+                claimName: chromadb-data-pvc
+            - name: mcp-config
+              configMap:
+                name: mcp-discovery-config
+            - name: mcp-data
+              emptyDir: {}
+
+          # Sidecar containers defined as initContainers with restartPolicy: Always
+          # These start BEFORE the main container
           initContainers:
-          livenessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /health
-              port: 8000
-              scheme: HTTP
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            successThreshold: 1
-            timeoutSeconds: 120
-          readinessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /health
-              port: 8000
-              scheme: HTTP
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            successThreshold: 1
-            timeoutSeconds: 120
-          env: []
+            # Sidecar 1: Embedding Service (starts first)
+            - name: embedding-service
+              image: ${EMBEDDING_SERVICE_IMAGE}:${EMBEDDING_SERVICE_IMAGE_TAG}
+              restartPolicy: Always
+              ports:
+                - name: rag
+                  containerPort: 8001
+                  protocol: TCP
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /health
+                  port: 8001
+                  scheme: HTTP
+                initialDelaySeconds: 15
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 10
+              readinessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /health
+                  port: 8001
+                  scheme: HTTP
+                initialDelaySeconds: 10
+                periodSeconds: 5
+                successThreshold: 1
+                timeoutSeconds: 10
+              startupProbe:
+                httpGet:
+                  path: /health
+                  port: 8001
+                  scheme: HTTP
+                failureThreshold: 30
+                periodSeconds: 5
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+                requests:
+                  cpu: "1"
+                  memory: 1Gi
+              volumeMounts:
+                - name: chromadb-data
+                  mountPath: /app/data
+              env:
+                - name: HOST
+                  value: "0.0.0.0"
+                - name: PORT
+                  value: "8001"
+                - name: LOG_LEVEL
+                  value: "INFO"
+
+            # Sidecar 2: MCP Discovery Service (starts second, waits for embedding-service)
+            - name: mcp-discovery-service
+              image: ${MCP_DISCOVERY_SERVICE_IMAGE}:${MCP_DISCOVERY_SERVICE_IMAGE_TAG}
+              restartPolicy: Always
+              ports:
+                - name: mcp-server
+                  containerPort: 8000
+                  protocol: TCP
+              # Startup probe waits for embedding-service dependency to be ready
+              startupProbe:
+                exec:
+                  command:
+                    - sh
+                    - -c
+                    - curl -f http://localhost:8001/health
+                failureThreshold: 60
+                periodSeconds: 5
+                timeoutSeconds: 3
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /health
+                  port: 8000
+                  scheme: HTTP
+                initialDelaySeconds: 10
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 10
+              readinessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /health
+                  port: 8000
+                  scheme: HTTP
+                initialDelaySeconds: 10
+                periodSeconds: 5
+                successThreshold: 1
+                timeoutSeconds: 10
+              resources:
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi
+                requests:
+                  cpu: "250m"
+                  memory: 256Mi
+              volumeMounts:
+                - name: mcp-config
+                  mountPath: /app-root/mcp-servers.yaml
+                  subPath: mcp-servers.yaml
+                  readOnly: true
+                - name: mcp-data
+                  mountPath: /app-root/data
+              env:
+                - name: HOST
+                  value: "0.0.0.0"
+                - name: PORT
+                  value: "8000"
+                - name: MCP_CONFIG_PATH
+                  value: "/app-root/mcp-servers.yaml"
+                - name: REFRESH_INTERVAL_MINUTES
+                  value: "5"
+                - name: LOG_LEVEL
+                  value: "INFO"
+                - name: ENABLE_VECTOR_STORE
+                  value: "true"
+                - name: EMBEDDING_SERVICE_URL
+                  value: "http://localhost:8001"
+                - name: CAPABILITIES_CACHE_PATH
+                  value: "/app-root/data/mcp-capabilities.json"
+                - name: VECTOR_STORE_ID
+                  value: "mcp-capabilities-store"
+                - name: EMBEDDING_MODEL
+                  value: "sentence-transformers/all-mpnet-base-v2"
+
+          # Main container (starts after sidecars, but waits for them to be healthy via startup probe)
+          containers:
+            - name: api
+              image: ${IMAGE}:${IMAGE_TAG}
+              ports:
+                - name: api
+                  containerPort: 8080
+                  protocol: TCP
+              # Startup probe checks that both sidecars are healthy before proceeding
+              startupProbe:
+                exec:
+                  command:
+                    - sh
+                    - -c
+                    - |
+                      # Check embedding-service is ready
+                      curl -f http://localhost:8001/health || exit 1
+                      # Check mcp-discovery-service is ready
+                      curl -f http://localhost:8000/health || exit 1
+                      # All dependencies ready!
+                      exit 0
+                failureThreshold: 60
+                periodSeconds: 5
+                timeoutSeconds: 3
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /liveness
+                  port: 8080
+                  scheme: HTTP
+                initialDelaySeconds: 10
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 10
+              readinessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /readiness
+                  port: 8080
+                  scheme: HTTP
+                initialDelaySeconds: 10
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 10
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 4Gi
+                requests:
+                  cpu: "1"
+                  memory: 2Gi
+              env: []
+
+  # PersistentVolumeClaim for ChromaDB vector database
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: chromadb-data-pvc
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${CHROMADB_STORAGE_SIZE}
+
+  # ConfigMap for MCP server configuration
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: mcp-discovery-config
+    data:
+      mcp-servers.yaml: |
+        # MCP Discovery Server Configuration
+        # This file lists the MCP servers to discover and index
+        mcp_servers:
+          # Add your MCP servers here
+          # Example:
+          # - name: "example-mcp-server"
+          #   provider_id: "example-mcp-provider"
+          #   url: "http://example-mcp-server:3001/mcp"
 
 parameters:
 - name: MIN_REPLICAS
@@ -62,3 +260,18 @@ parameters:
 - description: ClowdEnv Name
   name: ENV_NAME
   required: true
+- description: Embedding service image (unified embeddings + vector storage)
+  name: EMBEDDING_SERVICE_IMAGE
+  value: quay.io/cloudservices/hcc-ai-assistant-embedding-service
+- description: Embedding service image tag
+  name: EMBEDDING_SERVICE_IMAGE_TAG
+  value: latest
+- description: MCP discovery service image
+  name: MCP_DISCOVERY_SERVICE_IMAGE
+  value: quay.io/cloudservices/hcc-ai-assistant-mcp-discovery-service
+- description: MCP discovery service image tag
+  name: MCP_DISCOVERY_SERVICE_IMAGE_TAG
+  value: latest
+- description: ChromaDB vector database PVC size
+  name: CHROMADB_STORAGE_SIZE
+  value: 10Gi
