@@ -30,9 +30,9 @@ conversation_cache:
 authentication:
   module: "rh-identity"
   rh_identity_config: {}
-# mcp_servers:
-#   - name: "local-mcp-server"
-#     provider_id: "local-mcp-provider"
-#     url: "http://localhost:3001/mcp"
-#     authorization_headers:
-#       x-rh-identity: "kubernetes"
+mcp_servers:
+  - name: "local-mcp-server"
+    provider_id: "local-mcp-provider"
+    url: "http://host.docker.internal:3001/mcp"
+    headers:
+      - x-rh-identity

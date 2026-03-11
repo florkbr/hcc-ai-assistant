@@ -3,12 +3,14 @@
 
   services:
     lightspeed-stack:
-      image: quay.io/lightspeed-core/lightspeed-stack:latest
+      image: quay.io/lightspeed-core/lightspeed-stack:eb97491
+      # Latest image has issues with queries
+      # image: quay.io/lightspeed-core/lightspeed-stack:latest
       ports:
-        - "8080:8080"  # Main API
+        - "3000:8080"  # Main API
       environment:
         - VERTEX_PROJECT=${VERTEX_PROJECT}
-        - VERTEX_LOCATION=${VERTEX_LOCATION}
+        - VERTEX_LOCATION=us-central1
         - ALLOWED_MODEL=${ALLOWED_MODEL}
         - GOOGLE_API_KEY=${GOOGLE_API_KEY}
         - GOOGLE_CLOUD_PROJECT=${VERTEX_PROJECT}
@@ -17,6 +19,8 @@
         - KV_STORE_PATH=/app-root/.llama/storage/rag/kv_store.db
         - SQL_STORE_PATH=/app-root/.llama/storage/sql_store.db
         - STORAGE_DIR=/app-root/.llama/storage/files
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
       volumes:
         - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:Z
         - ./run.yaml:/app-root/run.yaml:Z
