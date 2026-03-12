@@ -67,7 +67,7 @@
         - HOST=0.0.0.0
         - PORT=8000
         - LOG_LEVEL=INFO
-        - MCP_CONFIG_PATH=/app-root/mcp-servers.yaml
+        - MCP_CONFIG_PATH=/app-root/lightspeed-stack.yaml
         - REFRESH_INTERVAL_MINUTES=5
         - ENABLE_VECTOR_STORE=true
         # Uses localhost since we share network namespace with lightspeed-stack
@@ -76,7 +76,7 @@
         - VECTOR_STORE_ID=mcp-capabilities-store
         - EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2 # nomic-ai/nomic-embed-text-v1.5 requires remote code execution
       volumes:
-        - ./mcp-servers.yaml:/app-root/mcp-servers.yaml:ro
+        - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro
         - mcp-data:/app-root/data
       healthcheck:
         test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

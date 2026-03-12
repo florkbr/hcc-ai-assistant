@@ -62,6 +62,10 @@ providers:
       url: http://localhost:8000/mcp
     provider_id: mcp-discovery-provider
     provider_type: remote::model-context-protocol
+  # - config:
+  #     url: http://localhost:3001/mcp
+  #   provider_id: local-mcp-provider
+  #   provider_type: remote::model-context-protocol
   vector_io:
   - config: # Define the storage backend for RAG
       persistence:

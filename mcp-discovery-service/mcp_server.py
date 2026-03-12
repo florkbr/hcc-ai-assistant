@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
+# TODO: investigate intermittent 400 errors when lcore connects to mcp-discovery-server (seemingly during discovery sync)
 class MCPDiscoveryServer:
     """MCP server exposing discovery tools"""
 
@@ -86,7 +87,12 @@ class MCPDiscoveryServer:
             schema_json = json.dumps(found_cap.model_dump(), indent=2)
             return f"Tool Schema for '{tool_name}':\n\n{schema_json}"
 
-        @self.mcp.tool()
+        # TODO build out annoations for all MCP endpoints. At minimum name and description to make this explicit lookup. We should follow all the specs/best practices for this.
+        # TODO return score from vector DB (ie 1 to -1) for clarity how the vector db is working when tracing tool calls
+        @self.mcp.tool(
+            name="recommend_tools",
+            description="Get tool recommendations based on a task description.",
+        )
         async def recommend_tools(task: str, limit: int = 5) -> str:
             """Get tool recommendations based on a task description.
 

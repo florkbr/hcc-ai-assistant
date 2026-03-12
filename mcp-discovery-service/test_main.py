@@ -302,7 +302,7 @@ def test_indexer_initialization():
 
 def test_indexer_load_config(sample_config_yaml, tmp_path):
     """Test loading MCP servers from YAML config"""
-    config_file = tmp_path / "mcp-servers.yaml"
+    config_file = tmp_path / "lightspeed-stack.yaml"
     config_file.write_text(sample_config_yaml)
 
     with patch('main.config.MCP_CONFIG_PATH', str(config_file)):
@@ -316,7 +316,7 @@ def test_indexer_load_config(sample_config_yaml, tmp_path):
 
 def test_indexer_load_empty_config(empty_config_yaml, tmp_path):
     """Test loading config with all servers commented out"""
-    config_file = tmp_path / "mcp-servers.yaml"
+    config_file = tmp_path / "lightspeed-stack.yaml"
     config_file.write_text(empty_config_yaml)
 
     with patch('main.config.MCP_CONFIG_PATH', str(config_file)):
@@ -443,7 +443,7 @@ async def test_indexer_save_capabilities(sample_capabilities, tmp_path):
 @pytest.mark.asyncio
 async def test_indexer_refresh_index(sample_config_yaml, tmp_path, mock_mcp_session):
     """Test full index refresh process"""
-    config_file = tmp_path / "mcp-servers.yaml"
+    config_file = tmp_path / "lightspeed-stack.yaml"
     config_file.write_text(sample_config_yaml)
     cache_file = tmp_path / "capabilities.json"
 

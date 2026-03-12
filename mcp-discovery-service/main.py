@@ -40,7 +40,7 @@ class Config:
     PORT: int = int(os.getenv("PORT", "8000"))
 
     # MCP configuration
-    MCP_CONFIG_PATH: str = os.getenv("MCP_CONFIG_PATH", "/app-root/mcp-servers.yaml")
+    MCP_CONFIG_PATH: str = os.getenv("MCP_CONFIG_PATH", "/app-root/lightspeed-stack.yaml")
     CAPABILITIES_CACHE_PATH: str = os.getenv("CAPABILITIES_CACHE_PATH", "/app-root/data/mcp-capabilities.json")
     REFRESH_INTERVAL_MINUTES: int = int(os.getenv("REFRESH_INTERVAL_MINUTES", "5"))
 
@@ -103,6 +103,7 @@ class VectorStoreClient:
             logger.error(f"Error generating embedding: {e}")
             raise
 
+    # TODO: each sync track old capabilities, make new ones available - compare new to old and prune old tools (or else db will grow unbounded)
     async def insert_capabilities(self, capabilities: List[MCPCapability]) -> None:
         """Insert capabilities into vector store"""
         if not capabilities:

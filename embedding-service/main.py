@@ -349,6 +349,7 @@ async def list_vector_stores():
 # ROOT ENDPOINT
 # ============================================================================
 
+# TODO: see if this is needed, can we remove it? Is there a better way to do this than hardcoding?
 @app.get("/")
 async def root():
     """Root endpoint with service info"""

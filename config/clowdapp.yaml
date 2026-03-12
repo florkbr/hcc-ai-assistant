@@ -140,8 +140,8 @@ objects:
                   memory: 256Mi
               volumeMounts:
                 - name: mcp-config
-                  mountPath: /app-root/mcp-servers.yaml
-                  subPath: mcp-servers.yaml
+                  mountPath: /app-root/lightspeed-stack.yaml
+                  subPath: lightspeed-stack.yaml
                   readOnly: true
                 - name: mcp-data
                   mountPath: /app-root/data
@@ -151,7 +151,7 @@ objects:
                 - name: PORT
                   value: "8000"
                 - name: MCP_CONFIG_PATH
-                  value: "/app-root/mcp-servers.yaml"
+                  value: "/app-root/lightspeed-stack.yaml"
                 - name: REFRESH_INTERVAL_MINUTES
                   value: "5"
                 - name: LOG_LEVEL
@@ -233,14 +233,15 @@ objects:
           storage: ${CHROMADB_STORAGE_SIZE}
 
   # ConfigMap for MCP server configuration
+  # Note: Only mcp_servers section is included; mcp-discovery-service reads this from lightspeed-stack.yaml
   - apiVersion: v1
     kind: ConfigMap
     metadata:
       name: mcp-discovery-config
     data:
-      mcp-servers.yaml: |
-        # MCP Discovery Server Configuration
-        # This file lists the MCP servers to discover and index
+      lightspeed-stack.yaml: |
+        # MCP servers to discover and index
+        # mcp-discovery-service reads the mcp_servers section from this file
         mcp_servers:
           # Add your MCP servers here
           # Example:

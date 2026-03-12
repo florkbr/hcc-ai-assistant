@@ -138,7 +138,7 @@ For detailed configuration options, see individual service READMEs:
 
 ### MCP Server Configuration
 
-MCP servers to discover are configured in `mcp-servers.yaml`:
+MCP servers to discover are configured in `lightspeed-stack.yaml` (the `mcp_servers` section):
 
 ```yaml
 mcp_servers:
@@ -147,7 +147,7 @@ mcp_servers:
     url: "http://my-mcp-server:3001/mcp"
 ```
 
-In Kubernetes/OpenShift, this is managed via ConfigMap.
+In Kubernetes/OpenShift, this is managed via ConfigMap (mounted as lightspeed-stack.yaml).
 
 ## Testing
 

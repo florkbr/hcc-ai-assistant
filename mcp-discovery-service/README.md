@@ -36,7 +36,7 @@ docker build -t mcp-discovery-service:latest .
 
 # Run with defaults (host=0.0.0.0, port=8000)
 docker run -p 8000:8000 \
-  -v $(pwd)/mcp-servers.yaml:/app-root/mcp-servers.yaml:ro \
+  -v $(pwd)/../lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro \
   -e ENABLE_VECTOR_STORE=true \
   -e EMBEDDING_SERVICE_URL=http://embedding-service:8001 \
   mcp-discovery-service:latest
@@ -44,13 +44,13 @@ docker run -p 8000:8000 \
 # Override port
 docker run -p 9000:9000 \
   -e PORT=9000 \
-  -v $(pwd)/mcp-servers.yaml:/app-root/mcp-servers.yaml:ro \
+  -v $(pwd)/../lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro \
   mcp-discovery-service:latest
 
 # Use IPv6/dual-stack
 docker run -p 8000:8000 \
   -e HOST=:: \
-  -v $(pwd)/mcp-servers.yaml:/app-root/mcp-servers.yaml:ro \
+  -v $(pwd)/../lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro \
   mcp-discovery-service:latest
 ```
 
@@ -127,7 +127,7 @@ Environment variables:
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | Server host (use `::` for IPv6/dual-stack) |
 | `PORT` | `8000` | Server port |
-| `MCP_CONFIG_PATH` | `/app-root/mcp-servers.yaml` | MCP servers config |
+| `MCP_CONFIG_PATH` | `/app-root/lightspeed-stack.yaml` | MCP servers config (reads mcp_servers section) |
 | `CAPABILITIES_CACHE_PATH` | `/app-root/data/mcp-capabilities.json` | JSON cache file for capabilities |
 | `REFRESH_INTERVAL_MINUTES` | 5 | Auto-refresh interval |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
@@ -142,7 +142,7 @@ Environment variables:
 
 ## MCP Servers Configuration
 
-Create `mcp-servers.yaml`:
+The service reads MCP servers from `lightspeed-stack.yaml` (the `mcp_servers` section):
 
 ```yaml
 mcp_servers:
@@ -151,7 +151,7 @@ mcp_servers:
     url: "http://example-server:3001/mcp"
 ```
 
-In Kubernetes/OpenShift, this is managed via ConfigMap.
+In Kubernetes/OpenShift, this is managed via ConfigMap (mounted as lightspeed-stack.yaml).
 
 ## Architecture
 
@@ -337,7 +337,7 @@ docker-compose logs mcp-discovery-service | grep -i vector
 **Solution**:
 ```bash
 # Check MCP servers config
-cat /app-root/mcp-servers.yaml
+cat /app-root/lightspeed-stack.yaml
 
 # Check if MCP servers are reachable
 curl http://example-mcp-server:3001/mcp
