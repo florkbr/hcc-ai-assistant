@@ -3,15 +3,16 @@
 
   services:
     lightspeed-stack:
-      # pinned to 0.4.0 to avoid bug where lightspeed-core fails to initialize with empty response error
-      image: quay.io/lightspeed-core/lightspeed-stack:0.4.0
+      image: quay.io/lightspeed-core/lightspeed-stack:eb97491
+      # Latest image has issues with queries
+      # image: quay.io/lightspeed-core/lightspeed-stack:latest
       ports:
-        - "8080:8080"   # Main API (lightspeed-stack)
+        - "3000:8080"  # Main API
         - "8000:8000"   # MCP Discovery service (sidecar)
         - "8001:8001"   # Embedding service (sidecar)
       environment:
         - VERTEX_PROJECT=${VERTEX_PROJECT}
-        - VERTEX_LOCATION=${VERTEX_LOCATION}
+        - VERTEX_LOCATION=us-central1
         - ALLOWED_MODEL=${ALLOWED_MODEL}
         - GOOGLE_API_KEY=${GOOGLE_API_KEY}
         - GOOGLE_CLOUD_PROJECT=${VERTEX_PROJECT}
@@ -20,6 +21,8 @@
         - KV_STORE_PATH=/app-root/.llama/storage/rag/kv_store.db
         - SQL_STORE_PATH=/app-root/.llama/storage/sql_store.db
         - STORAGE_DIR=/app-root/.llama/storage/files
+      # Note: host.containers.internal works automatically in Podman and Docker Desktop
+      # Linux Docker users: add --add-host=host.containers.internal:host-gateway when running
       volumes:
         - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:Z
         - ./run.yaml:/app-root/run.yaml:Z

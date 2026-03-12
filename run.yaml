@@ -56,16 +56,15 @@ providers:
   - config: {} # Enable the RAG tool
     provider_id: rag-runtime
     provider_type: inline::rag-runtime
-  # Individual MCPs are accessed through mcp-discovery-provider, not directly
   # Uses localhost since mcp-discovery-service runs as a sidecar in the same pod
   - config:
       url: http://localhost:8000/mcp
     provider_id: mcp-discovery-provider
     provider_type: remote::model-context-protocol
-  # - config:
-  #     url: http://localhost:3001/mcp
-  #   provider_id: local-mcp-provider
-  #   provider_type: remote::model-context-protocol
+  - config:
+      url: http://host.docker.internal:3001
+    provider_id: local-mcp-provider
+    provider_type: remote::model-context-protocol
   vector_io:
   - config: # Define the storage backend for RAG
       persistence:
@@ -146,12 +145,7 @@ registered_resources:
   - shield_id: gemini-shield
     provider_id: gemini-safety
     provider_shield_id: "google-vertex/${env.ALLOWED_MODEL}"
-  # Currently only using keyword search as vector DB would require running llama-stack as a separate HTTP service
-  vector_stores:
-  - vector_store_id: mcp-capabilities-store
-    provider_id: faiss
-    embedding_model: nomic-ai/nomic-embed-text-v1.5
-    embedding_dimension: 768
+  vector_stores: []
   datasets: []
   scoring_fns: []
   benchmarks: []
