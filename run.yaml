@@ -56,6 +56,11 @@ providers:
   - config: {} # Enable the RAG tool
     provider_id: rag-runtime
     provider_type: inline::rag-runtime
+  # Uses localhost since mcp-discovery-service runs as a sidecar in the same pod
+  - config:
+      url: http://localhost:8000/mcp
+    provider_id: mcp-discovery-provider
+    provider_type: remote::model-context-protocol
   - config:
       url: http://host.docker.internal:3001
     provider_id: local-mcp-provider

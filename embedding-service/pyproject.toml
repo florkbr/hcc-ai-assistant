@@ -1,0 +1,59 @@
+[project]
+name = "embedding-service"
+version = "1.0.0"
+description = "Embedding Service - Unified embedding generation and vector storage service"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]==0.32.0",
+    "sentence-transformers==3.2.1",
+    "torch==2.5.1",
+    "numpy==2.0.2",
+    "pydantic>=2.11.0,<3.0.0",  # Aligned with mcp-discovery
+    "chromadb==0.5.23",
+    "starlette>=0.37.2,<0.42.0",  # Explicit version range
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.27.0",
+    "ruff>=0.14.8",
+    "black>=24.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "asyncio: mark test as async",
+]

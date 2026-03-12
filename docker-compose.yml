@@ -8,6 +8,8 @@
       # image: quay.io/lightspeed-core/lightspeed-stack:latest
       ports:
         - "3000:8080"  # Main API
+        - "8000:8000"   # MCP Discovery service (sidecar)
+        - "8001:8001"   # Embedding service (sidecar)
       environment:
         - VERTEX_PROJECT=${VERTEX_PROJECT}
         - VERTEX_LOCATION=us-central1
@@ -19,9 +21,73 @@
         - KV_STORE_PATH=/app-root/.llama/storage/rag/kv_store.db
         - SQL_STORE_PATH=/app-root/.llama/storage/sql_store.db
         - STORAGE_DIR=/app-root/.llama/storage/files
-      extra_hosts:
-        - "host.docker.internal:host-gateway"
+      # Note: host.containers.internal works automatically in Podman and Docker Desktop
+      # Linux Docker users: add --add-host=host.containers.internal:host-gateway when running
       volumes:
         - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:Z
         - ./run.yaml:/app-root/run.yaml:Z
         - ./service-account-key.json:/app/service-account-key.json:ro
+      # TCP healthcheck instead of HTTP (v0.4.0 doesn't support skip_for_health_probes)
+      # Upgrade to v0.4.1+ for HTTP /readiness and /liveness endpoint support
+      healthcheck:
+        test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 60s  # Give sidecars time to start
+
+    embedding-service:
+      build:
+        context: ./embedding-service
+        dockerfile: Dockerfile
+      network_mode: "service:lightspeed-stack"
+      depends_on:
+        - lightspeed-stack
+      restart: on-failure
+      environment:
+        - HOST=0.0.0.0
+        - PORT=8001
+        - LOG_LEVEL=INFO
+      volumes:
+        - chromadb-data:/app/data
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 20s
+
+    mcp-discovery-service:
+      build:
+        context: ./mcp-discovery-service
+        dockerfile: Dockerfile
+      network_mode: "service:lightspeed-stack"
+      depends_on:
+        - lightspeed-stack
+        - embedding-service
+      restart: on-failure
+      environment:
+        - HOST=0.0.0.0
+        - PORT=8000
+        - LOG_LEVEL=INFO
+        - MCP_CONFIG_PATH=/app-root/lightspeed-stack.yaml
+        - REFRESH_INTERVAL_MINUTES=5
+        - ENABLE_VECTOR_STORE=true
+        # Uses localhost since we share network namespace with lightspeed-stack
+        - EMBEDDING_SERVICE_URL=http://localhost:8001
+        - CAPABILITIES_CACHE_PATH=/app-root/data/mcp-capabilities.json
+        - VECTOR_STORE_ID=mcp-capabilities-store
+        - EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2 # nomic-ai/nomic-embed-text-v1.5 requires remote code execution
+      volumes:
+        - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro
+        - mcp-data:/app-root/data
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 30s
+
+  volumes:
+    mcp-data:
+    chromadb-data:
