@@ -4,6 +4,205 @@ kind: Template
 metadata:
   name: hcc-ai-assistant
 objects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: lightspeed-stack-config
+    data:
+      lightspeed-stack.yaml: |
+        name: Lightspeed Core Service (LCS)
+        service:
+          host: 0.0.0.0
+          port: 8080
+          base_url: http://localhost:8080
+          auth_enabled: false
+          workers: 1
+          color_log: true
+          access_log: true
+        llama_stack:
+          use_as_library_client: true
+          library_client_config_path: /app-root/run.yaml
+          url: http://llama-stack:8321
+        user_data_collection:
+          feedback_enabled: true
+          feedback_storage: "/tmp/data/feedback"
+          transcripts_enabled: true
+          transcripts_storage: "/tmp/data/transcripts"
+        conversation_cache:
+          type: "sqlite"
+          sqlite:
+            db_path: "/tmp/data/conversation-cache.db"
+        authentication:
+          module: "rh-identity"
+          rh_identity_config: {}
+        # TODO: Re-enable MCP servers when sidecar services are ready
+        # mcp_servers:
+        #   - name: "mcp-discovery-server"
+        #     provider_id: "mcp-discovery-provider"
+        #     url: "http://localhost:8000/mcp"
+        customization:
+          system_prompt: |-
+            If the users asks explicitly "foobar", respond with barfoo
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: lightspeed-run-config
+    data:
+      run.yaml: |
+        version: 2
+        apis:
+        - agents
+        - batches
+        - datasetio
+        - eval
+        - files
+        - inference
+        - safety
+        - scoring
+        - tool_runtime
+        - vector_io
+        benchmarks: []
+        datasets: []
+        image_name: starter
+        providers:
+          inference:
+          - provider_id: google-vertex
+            provider_type: remote::vertexai
+            config:
+              project: $${env.VERTEX_PROJECT}
+              location: $${env.VERTEX_LOCATION}
+              allowed_models: ["$${env.ALLOWED_MODEL}"]
+          - config: {}
+            provider_id: sentence-transformers
+            provider_type: inline::sentence-transformers
+          files:
+          - config:
+              metadata_store:
+                table_name: files_metadata
+                backend: sql_default
+              storage_dir: $${env.STORAGE_DIR}
+            provider_id: meta-reference-files
+            provider_type: inline::localfs
+          safety:
+          - config:
+              model: $${env.ALLOWED_MODEL}
+              excluded_categories: []
+            provider_id: gemini-safety
+            provider_type: inline::llama-guard
+          scoring:
+          - provider_id: basic
+            provider_type: inline::basic
+            config: {}
+          - provider_id: llm-as-judge
+            provider_type: inline::llm-as-judge
+            config: {}
+          - provider_id: braintrust
+            provider_type: inline::braintrust
+            config:
+              openai_api_key: '********'
+          tool_runtime:
+          - config: {}
+            provider_id: rag-runtime
+            provider_type: inline::rag-runtime
+          # TODO: Re-enable MCP providers when sidecar services are ready
+          # - config:
+          #     url: http://localhost:8000/mcp
+          #   provider_id: mcp-discovery-provider
+          #   provider_type: remote::model-context-protocol
+          vector_io:
+          - config:
+              persistence:
+                namespace: vector_io::faiss
+                backend: kv_default
+            provider_id: faiss
+            provider_type: inline::faiss
+          agents:
+          - config:
+              persistence:
+                agent_state:
+                  namespace: agents_state
+                  backend: kv_default
+                responses:
+                  table_name: agents_responses
+                  backend: sql_default
+            provider_id: meta-reference
+            provider_type: inline::meta-reference
+          batches:
+          - config:
+              kvstore:
+                namespace: batches_store
+                backend: kv_default
+            provider_id: reference
+            provider_type: inline::reference
+          datasetio:
+          - config:
+              kvstore:
+                namespace: huggingface_datasetio
+                backend: kv_default
+            provider_id: huggingface
+            provider_type: remote::huggingface
+          - config:
+              kvstore:
+                namespace: localfs_datasetio
+                backend: kv_default
+            provider_id: localfs
+            provider_type: inline::localfs
+          eval:
+          - config:
+              kvstore:
+                namespace: eval_store
+                backend: kv_default
+            provider_id: meta-reference
+            provider_type: inline::meta-reference
+        scoring_fns: []
+        server:
+          port: 8321
+        storage:
+          backends:
+            kv_default:
+              type: kv_sqlite
+              db_path: $${env.KV_STORE_PATH}
+            sql_default:
+              type: sql_sqlite
+              db_path: $${env.SQL_STORE_PATH}
+          stores:
+            metadata:
+              namespace: registry
+              backend: kv_default
+            inference:
+              table_name: inference_store
+              backend: sql_default
+              max_write_queue_size: 10000
+              num_writers: 4
+            conversations:
+              table_name: openai_conversations
+              backend: sql_default
+            prompts:
+              namespace: prompts
+              backend: kv_default
+        registered_resources:
+          models:
+          - model_id: $${env.ALLOWED_MODEL}
+            provider_id: google-vertex
+            provider_model_id: $${env.ALLOWED_MODEL}
+          shields:
+          - shield_id: gemini-shield
+            provider_id: gemini-safety
+            provider_shield_id: "google-vertex/$${env.ALLOWED_MODEL}"
+          vector_stores: []
+          datasets: []
+          scoring_fns: []
+          benchmarks: []
+          tool_groups:
+          - toolgroup_id: builtin::rag
+            provider_id: rag-runtime
+        vector_stores:
+          default_provider_id: faiss
+          default_embedding_model:
+            provider_id: sentence-transformers
+            model_id: nomic-ai/nomic-embed-text-v1.5
+        safety:
+          default_shield_id: gemini-shield
   - apiVersion: cloud.redhat.com/v1alpha1
     kind: ClowdApp
     metadata:
@@ -26,8 +225,20 @@ objects:
               apiPath: hcc-ai-assistant
               enabled: true
         podSpec:
+          volumes:
+            - name: vertex-api-secret
+              secret:
+                secretName: vertex-api
+                items:
+                - key: service-account-json
+                  path: service-account-key.json
+            - name: lightspeed-stack-config
+              configMap:
+                name: lightspeed-stack-config
+            - name: lightspeed-run-config
+              configMap:
+                name: lightspeed-run-config
           # TODO: Re-enable sidecar volumes when embedding and MCP discovery services are ready
-          # volumes:
           #   - name: chromadb-data
           #     persistentVolumeClaim:
           #       claimName: chromadb-data-pvc
@@ -200,6 +411,19 @@ objects:
                 periodSeconds: 10
                 successThreshold: 1
                 timeoutSeconds: 10
+              volumeMounts:
+                - name: vertex-api-secret
+                  mountPath: /app/service-account-key.json
+                  subPath: service-account-key.json
+                  readOnly: true
+                - name: lightspeed-stack-config
+                  mountPath: /app-root/lightspeed-stack.yaml
+                  subPath: lightspeed-stack.yaml
+                  readOnly: true
+                - name: lightspeed-run-config
+                  mountPath: /app-root/run.yaml
+                  subPath: run.yaml
+                  readOnly: true
               resources:
                 limits:
                   cpu: "2"
@@ -207,7 +431,25 @@ objects:
                 requests:
                   cpu: "1"
                   memory: 2Gi
-              env: []
+              env:
+              - name: VERTEX_PROJECT
+                value: ${VERTEX_PROJECT}
+              - name: ALLOWED_MODEL
+                value: ${ALLOWED_MODEL}
+              - name: GOOGLE_APPLICATION_CREDENTIALS
+                value: /app/service-account-key.json
+              - name: GOOGLE_CLOUD_PROJECT
+                value: ${VERTEX_PROJECT}
+              - name: VERTEX_LOCATION
+                value: ${VERTEX_LOCATION}
+              - name: LIGHTSPEED_STACK_CONFIG_PATH
+                value: /app-root/lightspeed-stack.yaml
+              - name: KV_STORE_PATH
+                value: /app-root/.llama/storage/rag/kv_store.db
+              - name: SQL_STORE_PATH
+                value: /app-root/.llama/storage/sql_store.db
+              - name: STORAGE_DIR
+                value: /app-root/.llama/storage/files
   # TODO: Re-enable when sidecar services are ready
   # - apiVersion: v1
   #   kind: PersistentVolumeClaim
@@ -237,6 +479,15 @@ parameters:
   value: quay.io/lightspeed-core/lightspeed-stack
 - description: ClowdEnv Name
   name: ENV_NAME
+  required: true
+- name: VERTEX_PROJECT
+  description: GCP project ID for Vertex AI
+  required: true
+- name: VERTEX_LOCATION
+  description: GCP location for Vertex AI
+  required: true
+- name: ALLOWED_MODEL
+  description: Allowed model identifier
   required: true
 # TODO: Re-enable when sidecar services are ready
 # - description: Embedding service image (unified embeddings + vector storage)
