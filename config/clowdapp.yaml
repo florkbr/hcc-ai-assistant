@@ -185,9 +185,16 @@ objects:
           - name: vertex-api
             secret:
               secretName: vertex-api
+          - name: lightspeed-stack-config
+            configMap:
+              name: lightspeed-stack-config
           volumeMounts:
           - name: vertex-api
             mountPath: /opt/secrets
+            readOnly: true
+          - name: lightspeed-stack-config
+            mountPath: /app-root/lightspeed-stack.yaml
+            subPath: lightspeed-stack.yaml
             readOnly: true
           resources:
             limits:
@@ -196,7 +203,17 @@ objects:
             requests:
               cpu: "1"
               memory: 2Gi
-          env: []
+          env:
+          - name: LIGHTSPEED_STACK_CONFIG_PATH
+            value: ${LIGHTSPEED_STACK_CONFIG_PATH}
+          - name: VERTEX_PROJECT
+            value: ${VERTEX_PROJECT}
+          - name: VERTEX_LOCATION
+            value: ${VERTEX_LOCATION}
+          - name: ALLOWED_MODEL
+            value: ${ALLOWED_MODEL}
+          - name: VERTEX_SECRET_PATH
+            value: ${VERTEX_SECRET_PATH}
   # TODO: Re-enable when sidecar services are ready
   # - apiVersion: v1
   #   kind: PersistentVolumeClaim
@@ -216,6 +233,16 @@ objects:
   #     lightspeed-stack.yaml: |
   #       mcp_servers:
 parameters:
+- name: VERTEX_PROJECT
+  required: true
+- name: VERTEX_LOCATION
+  required: true
+- name: ALLOWED_MODEL
+  required: true
+- name: VERTEX_SECRET_PATH
+  value: /opt/secrets/service-account-json
+- name: LIGHTSPEED_STACK_CONFIG_PATH
+  value: /app-root/lightspeed-stack.yaml
 - name: MIN_REPLICAS
   value: '3'
 - description: Image tag
