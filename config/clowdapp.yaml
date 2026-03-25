@@ -160,54 +160,43 @@ objects:
           #         value: "mcp-capabilities-store"
           #       - name: EMBEDDING_MODEL
           #         value: "sentence-transformers/all-mpnet-base-v2"
-          containers:
-            - name: api
-              image: ${IMAGE}:${IMAGE_TAG}
-              ports:
-                - name: api
-                  containerPort: 8080
-                  protocol: TCP
-              # TODO: Re-enable sidecar health checks in startupProbe when sidecars are restored
-              # startupProbe:
-              #   exec:
-              #     command:
-              #       - sh
-              #       - -c
-              #       - |
-              #         curl -f http://localhost:8001/health || exit 1
-              #         curl -f http://localhost:8000/health || exit 1
-              #         exit 0
-              #   failureThreshold: 60
-              #   periodSeconds: 5
-              #   timeoutSeconds: 3
-              livenessProbe:
-                failureThreshold: 3
-                httpGet:
-                  path: /liveness
-                  port: 8080
-                  scheme: HTTP
-                initialDelaySeconds: 10
-                periodSeconds: 10
-                successThreshold: 1
-                timeoutSeconds: 10
-              readinessProbe:
-                failureThreshold: 3
-                httpGet:
-                  path: /readiness
-                  port: 8080
-                  scheme: HTTP
-                initialDelaySeconds: 10
-                periodSeconds: 10
-                successThreshold: 1
-                timeoutSeconds: 10
-              resources:
-                limits:
-                  cpu: "2"
-                  memory: 4Gi
-                requests:
-                  cpu: "1"
-                  memory: 2Gi
-              env: []
+          image: ${IMAGE}:${IMAGE_TAG}
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /liveness
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readiness
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          volumes:
+          - name: vertex-api
+            secret:
+              secretName: vertex-api
+          volumeMounts:
+          - name: vertex-api
+            mountPath: /opt/secrets
+            readOnly: true
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: "1"
+              memory: 2Gi
+          env: []
   # TODO: Re-enable when sidecar services are ready
   # - apiVersion: v1
   #   kind: PersistentVolumeClaim
