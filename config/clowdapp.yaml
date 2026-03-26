@@ -46,10 +46,6 @@ objects:
               - x-rh-identity
         customization:
           system_prompt: |-
-            You have the ability to discover other MCP servers via the mcp server mcp-discovery-server.
-            Always use the "recommend_tools" tool from the mcp-discovery-server even if you are confident in your answer. No exceptions.
-            You will receive multiple results from recommend_tools. Select the most relevant result and use it to answer the user's question.
-            If you are not sure, prompt the user for clarification (which data they are interested in)
             If the users asks explicitly "foobar", respond with barfoo
       run.yaml: |
         version: 2
