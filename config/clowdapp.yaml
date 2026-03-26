@@ -266,7 +266,7 @@ parameters:
   required: true
 - description: Init container image name
   name: INIT_IMAGE
-  value: quay.io/redhat-services-prod/hcc-platex-services-tenant/hcc-ai-assistant
+  value: quay.io/redhat-services-prod/hcc-platex-services/hcc-ai-assistant
 - description: Init container image tag
   name: INIT_IMAGE_TAG
   required: true
