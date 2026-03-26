@@ -75,9 +75,9 @@ objects:
           - provider_id: google-vertex
             provider_type: remote::vertexai
             config:
-              project: $${env.VERTEX_PROJECT}
-              location: $${env.VERTEX_LOCATION}
-              allowed_models: ["$${env.ALLOWED_MODEL}"]
+              project: ${env.VERTEX_PROJECT}
+              location: ${env.VERTEX_LOCATION}
+              allowed_models: ["${env.ALLOWED_MODEL}"]
           - config: {}
             provider_id: sentence-transformers
             provider_type: inline::sentence-transformers
@@ -86,12 +86,12 @@ objects:
               metadata_store:
                 table_name: files_metadata
                 backend: sql_default
-              storage_dir: $${env.STORAGE_DIR}
+              storage_dir: ${env.STORAGE_DIR}
             provider_id: meta-reference-files
             provider_type: inline::localfs
           safety:
           - config:
-              model: $${env.ALLOWED_MODEL}
+              model: ${env.ALLOWED_MODEL}
               excluded_categories: []
             provider_id: gemini-safety
             provider_type: inline::llama-guard
@@ -170,10 +170,10 @@ objects:
           backends:
             kv_default:
               type: kv_sqlite
-              db_path: $${env.KV_STORE_PATH}
+              db_path: ${env.KV_STORE_PATH}
             sql_default:
               type: sql_sqlite
-              db_path: $${env.SQL_STORE_PATH}
+              db_path: ${env.SQL_STORE_PATH}
           stores:
             metadata:
               namespace: registry
@@ -191,13 +191,13 @@ objects:
               backend: kv_default
         registered_resources:
           models:
-            - model_id: $${env.ALLOWED_MODEL}
+            - model_id: ${env.ALLOWED_MODEL}
               provider_id: google-vertex
-              provider_model_id: $${env.ALLOWED_MODEL}
+              provider_model_id: ${env.ALLOWED_MODEL}
           shields:
           - shield_id: gemini-shield
             provider_id: gemini-safety
-            provider_shield_id: "google-vertex/$${env.ALLOWED_MODEL}"
+            provider_shield_id: "google-vertex/${env.ALLOWED_MODEL}"
           vector_stores: []
           datasets: []
           scoring_fns: []
