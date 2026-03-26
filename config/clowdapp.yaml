@@ -189,7 +189,7 @@ objects:
             emptyDir: {}
           initContainers:
           - name: create-config
-            image: quay.io/redhat-services-prod/hcc-platex-services-tenant/hcc-ai-assistant:${INIT_IMAGE_TAG}
+            image: ${INIT_IMAGE}:${INIT_IMAGE_TAG}
             command: ["sh", "-c", "cp /app/run.yaml /app/lightspeed-stack.yaml /output/"]
             volumeMounts:
             - name: lightspeed-stack-config
@@ -264,6 +264,9 @@ parameters:
 - description: ClowdEnv Name
   name: ENV_NAME
   required: true
+- description: Init container image name
+  name: INIT_IMAGE
+  value: quay.io/redhat-services-prod/hcc-platex-services/hcc-ai-assistant
 - description: Init container image tag
   name: INIT_IMAGE_TAG
   required: true
