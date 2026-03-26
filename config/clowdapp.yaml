@@ -186,8 +186,14 @@ objects:
             secret:
               secretName: vertex-api
           - name: lightspeed-stack-config
-            configMap:
-              name: lightspeed-stack-config
+            emptyDir: {}
+          initContainers:
+          - name: create-config
+            image: ${INIT_IMAGE}:${INIT_IMAGE_TAG}
+            command: ["sh", "-c", "cp /app/run.yaml /app/lightspeed-stack.yaml /output/"]
+            volumeMounts:
+            - name: lightspeed-stack-config
+              mountPath: /output
           volumeMounts:
           - name: vertex-api
             mountPath: /opt/secrets
@@ -195,6 +201,10 @@ objects:
           - name: lightspeed-stack-config
             mountPath: /app-root/lightspeed-stack.yaml
             subPath: lightspeed-stack.yaml
+            readOnly: true
+          - name: lightspeed-stack-config
+            mountPath: /app-root/run.yaml
+            subPath: run.yaml
             readOnly: true
           resources:
             limits:
@@ -253,6 +263,12 @@ parameters:
   value: quay.io/lightspeed-core/lightspeed-stack
 - description: ClowdEnv Name
   name: ENV_NAME
+  required: true
+- description: Init container image name
+  name: INIT_IMAGE
+  value: quay.io/redhat-services-prod/hcc-platex-services-tenant/hcc-ai-assistant
+- description: Init container image tag
+  name: INIT_IMAGE_TAG
   required: true
 # TODO: Re-enable when sidecar services are ready
 # - description: Embedding service image (unified embeddings + vector storage)
