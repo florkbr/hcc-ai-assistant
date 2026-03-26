@@ -1,4 +1,3 @@
-FROM quay.io/lightspeed-core/lightspeed-stack:eb97491
+FROM registry.access.redhat.com/ubi9/ubi-micro
 
-COPY lightspeed-stack.yaml /app-root/lightspeed-stack.yaml
-COPY run.yaml /app-root/run.yaml
+COPY run.yaml lightspeed-stack.yaml /app/
