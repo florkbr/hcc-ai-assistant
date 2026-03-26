@@ -4,6 +4,214 @@ kind: Template
 metadata:
   name: hcc-ai-assistant
 objects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: lightspeed-stack-config
+    data:
+      lightspeed-stack.yaml: |
+        name: Lightspeed Core Service (LCS)
+        service:
+          host: 0.0.0.0
+          port: 8080
+          base_url: http://localhost:8080
+          auth_enabled: false
+          workers: 1
+          color_log: true
+          access_log: true
+        llama_stack:
+          use_as_library_client: true
+          library_client_config_path: /app-root/run.yaml
+          url: http://llama-stack:8321
+        user_data_collection:
+          feedback_enabled: true
+          feedback_storage: "/tmp/data/feedback"
+          transcripts_enabled: true
+          transcripts_storage: "/tmp/data/transcripts"
+        conversation_cache:
+          type: "sqlite"
+          sqlite:
+            db_path: "/tmp/data/conversation-cache.db"
+        authentication:
+          module: "rh-identity"
+          rh_identity_config: {}
+        mcp_servers:
+          - name: "mcp-discovery-server"
+            provider_id: "mcp-discovery-provider"
+            url: "http://localhost:8000/mcp"
+          - name: "local-mcp-server"
+            provider_id: "local-mcp-provider"
+            url: "http://host.docker.internal:3001/mcp"
+            headers:
+              - x-rh-identity
+        customization:
+          system_prompt: |-
+            You have the ability to discover other MCP servers via the mcp server mcp-discovery-server.
+            Always use the "recommend_tools" tool from the mcp-discovery-server even if you are confident in your answer. No exceptions.
+            You will receive multiple results from recommend_tools. Select the most relevant result and use it to answer the user's question.
+            If you are not sure, prompt the user for clarification (which data they are interested in)
+            If the users asks explicitly "foobar", respond with barfoo
+      run.yaml: |
+        version: 2
+
+        apis:
+        - agents
+        - batches
+        - datasetio
+        - eval
+        - files
+        - inference
+        - safety
+        - scoring
+        - tool_runtime
+        - vector_io
+
+        benchmarks: []
+        datasets: []
+        image_name: starter
+
+        providers:
+          inference:
+          - provider_id: google-vertex
+            provider_type: remote::vertexai
+            config:
+              project: $${env.VERTEX_PROJECT}
+              location: $${env.VERTEX_LOCATION}
+              allowed_models: ["$${env.ALLOWED_MODEL}"]
+          - config: {}
+            provider_id: sentence-transformers
+            provider_type: inline::sentence-transformers
+          files:
+          - config:
+              metadata_store:
+                table_name: files_metadata
+                backend: sql_default
+              storage_dir: $${env.STORAGE_DIR}
+            provider_id: meta-reference-files
+            provider_type: inline::localfs
+          safety:
+          - config:
+              model: $${env.ALLOWED_MODEL}
+              excluded_categories: []
+            provider_id: gemini-safety
+            provider_type: inline::llama-guard
+          scoring:
+          - provider_id: basic
+            provider_type: inline::basic
+            config: {}
+          - provider_id: llm-as-judge
+            provider_type: inline::llm-as-judge
+            config: {}
+          - provider_id: braintrust
+            provider_type: inline::braintrust
+            config:
+              openai_api_key: '********'
+          tool_runtime:
+          - config: {}
+            provider_id: rag-runtime
+            provider_type: inline::rag-runtime
+          - config:
+              url: http://localhost:8000/mcp
+            provider_id: mcp-discovery-provider
+            provider_type: remote::model-context-protocol
+          - config:
+              url: http://host.docker.internal:3001
+            provider_id: local-mcp-provider
+            provider_type: remote::model-context-protocol
+          vector_io:
+          - config:
+              persistence:
+                namespace: vector_io::faiss
+                backend: kv_default
+            provider_id: faiss
+            provider_type: inline::faiss
+          agents:
+          - config:
+              persistence:
+                agent_state:
+                  namespace: agents_state
+                  backend: kv_default
+                responses:
+                  table_name: agents_responses
+                  backend: sql_default
+            provider_id: meta-reference
+            provider_type: inline::meta-reference
+          batches:
+          - config:
+              kvstore:
+                namespace: batches_store
+                backend: kv_default
+            provider_id: reference
+            provider_type: inline::reference
+          datasetio:
+          - config:
+              kvstore:
+                namespace: huggingface_datasetio
+                backend: kv_default
+            provider_id: huggingface
+            provider_type: remote::huggingface
+          - config:
+              kvstore:
+                namespace: localfs_datasetio
+                backend: kv_default
+            provider_id: localfs
+            provider_type: inline::localfs
+          eval:
+          - config:
+              kvstore:
+                namespace: eval_store
+                backend: kv_default
+            provider_id: meta-reference
+            provider_type: inline::meta-reference
+        scoring_fns: []
+        server:
+          port: 8321
+        storage:
+          backends:
+            kv_default:
+              type: kv_sqlite
+              db_path: $${env.KV_STORE_PATH}
+            sql_default:
+              type: sql_sqlite
+              db_path: $${env.SQL_STORE_PATH}
+          stores:
+            metadata:
+              namespace: registry
+              backend: kv_default
+            inference:
+              table_name: inference_store
+              backend: sql_default
+              max_write_queue_size: 10000
+              num_writers: 4
+            conversations:
+              table_name: openai_conversations
+              backend: sql_default
+            prompts:
+              namespace: prompts
+              backend: kv_default
+        registered_resources:
+          models:
+            - model_id: $${env.ALLOWED_MODEL}
+              provider_id: google-vertex
+              provider_model_id: $${env.ALLOWED_MODEL}
+          shields:
+          - shield_id: gemini-shield
+            provider_id: gemini-safety
+            provider_shield_id: "google-vertex/$${env.ALLOWED_MODEL}"
+          vector_stores: []
+          datasets: []
+          scoring_fns: []
+          benchmarks: []
+          tool_groups:
+          - toolgroup_id: builtin::rag
+            provider_id: rag-runtime
+        vector_stores:
+          default_provider_id: faiss
+          default_embedding_model:
+            provider_id: sentence-transformers
+            model_id: nomic-ai/nomic-embed-text-v1.5
+        safety:
+          default_shield_id: gemini-shield
   - apiVersion: cloud.redhat.com/v1alpha1
     kind: ClowdApp
     metadata:
@@ -186,14 +394,8 @@ objects:
             secret:
               secretName: vertex-api
           - name: lightspeed-stack-config
-            emptyDir: {}
-          initContainers:
-          - name: create-config
-            image: ${INIT_IMAGE}:${INIT_IMAGE_TAG}
-            command: ["sh", "-c", "cp /app/run.yaml /app/lightspeed-stack.yaml /output/"]
-            volumeMounts:
-            - name: lightspeed-stack-config
-              mountPath: /output
+            configMap:
+              name: lightspeed-stack-config
           volumeMounts:
           - name: vertex-api
             mountPath: /opt/secrets
