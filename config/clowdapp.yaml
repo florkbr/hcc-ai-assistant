@@ -35,15 +35,15 @@ objects:
         authentication:
           module: "rh-identity"
           rh_identity_config: {}
-        mcp_servers:
-          - name: "mcp-discovery-server"
-            provider_id: "mcp-discovery-provider"
-            url: "http://localhost:8000/mcp"
-          - name: "local-mcp-server"
-            provider_id: "local-mcp-provider"
-            url: "http://host.docker.internal:3001/mcp"
-            headers:
-              - x-rh-identity
+        mcp_servers: []
+          # - name: "mcp-discovery-server"
+          #   provider_id: "mcp-discovery-provider"
+          #   url: "http://localhost:8000/mcp"
+          # - name: "local-mcp-server"
+          #   provider_id: "local-mcp-provider"
+          #   url: "http://host.docker.internal:3001/mcp"
+          #   headers:
+          #     - x-rh-identity
         customization:
           system_prompt: |-
             If the users asks explicitly "foobar", respond with barfoo
@@ -106,14 +106,14 @@ objects:
           - config: {}
             provider_id: rag-runtime
             provider_type: inline::rag-runtime
-          - config:
-              url: http://localhost:8000/mcp
-            provider_id: mcp-discovery-provider
-            provider_type: remote::model-context-protocol
-          - config:
-              url: http://host.docker.internal:3001
-            provider_id: local-mcp-provider
-            provider_type: remote::model-context-protocol
+          # - config:
+          #     url: http://localhost:8000/mcp
+          #   provider_id: mcp-discovery-provider
+          #   provider_type: remote::model-context-protocol
+          # - config:
+          #     url: http://host.docker.internal:3001
+          #   provider_id: local-mcp-provider
+          #   provider_type: remote::model-context-protocol
           vector_io:
           - config:
               persistence:
