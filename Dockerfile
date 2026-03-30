@@ -1,3 +1,3 @@
-FROM registry.access.redhat.com/ubi9/ubi-micro
+FROM registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9:latest
 
 COPY run.yaml lightspeed-stack.yaml /app/
