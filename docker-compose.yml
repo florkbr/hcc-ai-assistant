@@ -3,9 +3,9 @@
 
   services:
     lightspeed-stack:
-      image: quay.io/lightspeed-core/lightspeed-stack:eb97491
-      # Latest image has issues with queries
-      # image: quay.io/lightspeed-core/lightspeed-stack:latest
+      build:
+        context: .
+        dockerfile: Dockerfile
       ports:
         - "3000:8080"  # Main API
         - "8000:8000"   # MCP Discovery service (sidecar)
@@ -24,17 +24,13 @@
       # Note: host.containers.internal works automatically in Podman and Docker Desktop
       # Linux Docker users: add --add-host=host.containers.internal:host-gateway when running
       volumes:
-        - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:Z
-        - ./run.yaml:/app-root/run.yaml:Z
         - ./service-account-key.json:/app/service-account-key.json:ro
-      # TCP healthcheck instead of HTTP (v0.4.0 doesn't support skip_for_health_probes)
-      # Upgrade to v0.4.1+ for HTTP /readiness and /liveness endpoint support
       healthcheck:
         test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8080' || exit 1"]
         interval: 10s
         timeout: 5s
         retries: 5
-        start_period: 60s  # Give sidecars time to start
+        start_period: 60s
 
     embedding-service:
       build:

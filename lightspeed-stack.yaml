@@ -29,18 +29,17 @@ conversation_cache:
 
 authentication:
   module: "rh-identity"
-  # TODO lightspeed stack v0.4.0 did not support skip_for_health_probes (in config but not used in implementation)
-  # skip_for_health_probes: true
+  skip_for_health_probes: true
   rh_identity_config: {}
-mcp_servers:
-  - name: "mcp-discovery-server"
-    provider_id: "mcp-discovery-provider"
-    url: "http://localhost:8000/mcp"
-  - name: "local-mcp-server"
-    provider_id: "local-mcp-provider"
-    url: "http://host.docker.internal:3001/mcp"
-    headers:
-      - x-rh-identity
+# mcp_servers:
+#   - name: "mcp-discovery-server"
+#     provider_id: "mcp-discovery-provider"
+#     url: "http://localhost:8000/mcp"
+#   - name: "local-mcp-server"
+#     provider_id: "local-mcp-provider"
+#     url: "http://host.docker.internal:3001/mcp"
+    # headers:
+    #   - x-rh-identity
 customization:
   system_prompt: |-
     You have the ability to discover other MCP servers via the mcp server mcp-discovery-server.
