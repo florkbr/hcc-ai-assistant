@@ -4,7 +4,7 @@ USER root
 
 # Install uv and entrypoint dependencies
 RUN pip3.12 install "uv>=0.8.15" && \
-    uv pip install --system --index-url https://pypi.org/simple/ app-common-python pyyaml
+    uv pip install --python /app-root/.venv/bin/python --index-url https://pypi.org/simple/ app-common-python pyyaml
 
 USER 1001
 
