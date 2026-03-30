@@ -6,6 +6,10 @@ USER root
 RUN pip3.12 install "uv>=0.8.15" && \
     uv pip install --python /app-root/.venv/bin/python --index-url https://pypi.org/simple/ app-common-python pyyaml
 
+# OpenShift runs containers with a random UID in group 0 (root).
+# Make /app-root writable by group 0 so the entrypoint can write rendered configs.
+RUN chgrp -R 0 /app-root && chmod -R g=u /app-root
+
 USER 1001
 
 # Copy YAML templates and entrypoint script
