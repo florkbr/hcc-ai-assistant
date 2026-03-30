@@ -1,8 +1,8 @@
 name: Lightspeed Core Service (LCS)
 service:
   host: 0.0.0.0
-  port: 8080
-  base_url: http://localhost:8080
+  port: 8000
+  base_url: http://localhost:8000
   auth_enabled: false
   workers: 1
   color_log: true
@@ -34,7 +34,7 @@ authentication:
 # mcp_servers:
 #   - name: "mcp-discovery-server"
 #     provider_id: "mcp-discovery-provider"
-#     url: "http://localhost:8000/mcp"
+#     url: "http://localhost:8001/mcp"
 #   - name: "local-mcp-server"
 #     provider_id: "local-mcp-provider"
 #     url: "http://host.docker.internal:3001/mcp"

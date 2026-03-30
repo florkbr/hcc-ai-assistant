@@ -136,17 +136,17 @@ source .venv/bin/activate
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run the service (default port 8001)
-uvicorn main:app --reload --port 8001
+# Run the service (default port 8002)
+uvicorn main:app --reload --port 8002
 
 # Or use PORT environment variable
-PORT=8001 uvicorn main:app --reload --port $PORT
+PORT=8002 uvicorn main:app --reload --port $PORT
 
 # Test health
-curl http://localhost:8001/health
+curl http://localhost:8002/health
 
 # Test embeddings
-curl -X POST http://localhost:8001/v1/embeddings \
+curl -X POST http://localhost:8002/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{"input": ["test"]}'
 ```
@@ -156,14 +156,14 @@ curl -X POST http://localhost:8001/v1/embeddings \
 ```bash
 docker build -t embedding-service:latest .
 
-# Run with defaults (host=0.0.0.0, port=8001)
-docker run -p 8001:8001 -v $(pwd)/data:/app/data embedding-service:latest
+# Run with defaults (host=0.0.0.0, port=8002)
+docker run -p 8002:8002 -v $(pwd)/data:/app/data embedding-service:latest
 
 # Override port
 docker run -p 9000:9000 -e PORT=9000 -v $(pwd)/data:/app/data embedding-service:latest
 
 # Use IPv6/dual-stack
-docker run -p 8001:8001 -e HOST=:: -v $(pwd)/data:/app/data embedding-service:latest
+docker run -p 8002:8002 -e HOST=:: -v $(pwd)/data:/app/data embedding-service:latest
 ```
 
 ## Testing
@@ -227,7 +227,7 @@ Add to your CI pipeline:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | Server host (use `::` for IPv6/dual-stack) |
-| `PORT` | `8001` | Server port |
+| `PORT` | `8002` | Server port |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 **Note on HOST values:**
@@ -245,8 +245,8 @@ Add to your CI pipeline:
 
 In production, this service runs as a **sidecar container** in the same pod as lightspeed-stack and mcp-discovery-service. All services communicate via `localhost`:
 
-- **Port**: 8001 (internal to pod)
-- **Access**: `http://localhost:8001` from other containers in the pod
+- **Port**: 8002 (internal to pod)
+- **Access**: `http://localhost:8002` from other containers in the pod
 - **Startup Order**: embedding-service starts first (required by mcp-discovery-service)
 
 ### Docker Compose (Simulated Sidecar)
