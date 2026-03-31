@@ -31,15 +31,32 @@ def apply_clowder_config(run_config, stack_config, clowder):
     # Database config - switch from sqlite to postgres if DB is available
     if clowder.database:
         db = clowder.database
+        ssl_mode = getattr(db, "sslMode", None) or "prefer"
+
+        print(f"[entrypoint] Using Clowder DB: {db.hostname}:{db.port}/{db.name}")
+
+        pg_config = {
+            "host": db.hostname,
+            "port": db.port,
+            "db": db.name,
+            "user": db.username,
+            "password": db.password,
+            "ssl_mode": ssl_mode,
+        }
+
+        # Write RDS CA cert to file if provided
+        rds_ca = getattr(db, "rdsCa", None)
+        if rds_ca:
+            ca_path = "/tmp/rds-ca.crt"
+            with open(ca_path, "w") as f:
+                f.write(rds_ca)
+            pg_config["ca_cert_path"] = ca_path
+
         db_url = (
             f"postgresql://{db.username}:{db.password}"
             f"@{db.hostname}:{db.port}/{db.name}"
+            f"?sslmode={ssl_mode}"
         )
-        ssl_mode = getattr(db, "sslMode", None)
-        if ssl_mode:
-            db_url += f"?sslmode={ssl_mode}"
-
-        print(f"[entrypoint] Using Clowder DB: {db.hostname}:{db.port}/{db.name}")
 
         # Update storage backends from sqlite to postgres
         storage = run_config.get("storage", {})
@@ -57,9 +74,12 @@ def apply_clowder_config(run_config, stack_config, clowder):
         # Update conversation cache in stack config
         stack_config["conversation_cache"] = {
             "type": "postgres",
-            "postgres": {
-                "db_url": db_url,
-            },
+            "postgres": pg_config,
+        }
+
+        # Update main database config in stack config
+        stack_config["database"] = {
+            "postgres": pg_config,
         }
 
     return run_config, stack_config
