@@ -136,7 +136,7 @@ def test_config_defaults():
     """Test Config class uses correct default values"""
     config = Config()
     assert config.HOST == "0.0.0.0"
-    assert config.PORT == 8000
+    assert config.PORT == 8001
     assert config.REFRESH_INTERVAL_MINUTES == 5
     assert config.VECTOR_STORE_ID == "mcp-capabilities-store"
 
@@ -202,7 +202,7 @@ async def test_vector_store_generate_embedding(mock_httpx_client):
     """Test generating a single embedding"""
     with patch('main.httpx.AsyncClient', return_value=mock_httpx_client):
         client = VectorStoreClient(
-            base_url="http://localhost:8001",
+            base_url="http://localhost:8002",
             vector_store_id="test-store",
             embedding_model="test-model"
         )
@@ -229,7 +229,7 @@ async def test_vector_store_insert_capabilities(mock_httpx_client, sample_capabi
 
     with patch('main.httpx.AsyncClient', return_value=mock_httpx_client):
         client = VectorStoreClient(
-            base_url="http://localhost:8001",
+            base_url="http://localhost:8002",
             vector_store_id="test-store",
             embedding_model="test-model"
         )
@@ -244,7 +244,7 @@ async def test_vector_store_insert_empty_capabilities(mock_httpx_client):
     """Test inserting empty capabilities list"""
     with patch('main.httpx.AsyncClient', return_value=mock_httpx_client):
         client = VectorStoreClient(
-            base_url="http://localhost:8001",
+            base_url="http://localhost:8002",
             vector_store_id="test-store",
             embedding_model="test-model"
         )
@@ -277,7 +277,7 @@ async def test_vector_store_search_similar(mock_httpx_client, mock_http_response
 
     with patch('main.httpx.AsyncClient', return_value=mock_httpx_client):
         client = VectorStoreClient(
-            base_url="http://localhost:8001",
+            base_url="http://localhost:8002",
             vector_store_id="test-store",
             embedding_model="test-model"
         )

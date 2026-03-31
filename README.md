@@ -23,25 +23,25 @@ In production, all services run in a single pod as sidecars, communicating via `
 │ Pod: hcc-ai-assistant                          │
 │                                                │
 │  ┌──────────────────────┐                     │
-│  │ Container: api       │  port 8080          │
+│  │ Container: api       │  port 8000          │
 │  │ (lightspeed-stack)   │◄────────────────────┤─ Public
 │  │ - Google Vertex AI   │                     │
 │  │ - RAG capabilities   │                     │
 │  │ - Conversation cache │                     │
 │  └───────┬──────────────┘                     │
-│          │ localhost:8000/mcp                 │
+│          │ localhost:8001/mcp                 │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: mcp-disc    │  port 8000          │
+│  │ Sidecar: mcp-disc    │  port 8001          │
 │  │ (Python/FastMCP)     │                     │
 │  │ - MCP Server         │                     │
 │  │ - 4 MCP Tools        │                     │
 │  │ - Tool Discovery     │                     │
 │  └───────┬──────────────┘                     │
-│          │ localhost:8001                     │
+│          │ localhost:8002                     │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: embedding   │  port 8001          │
+│  │ Sidecar: embedding   │  port 8002          │
 │  │ (Python)             │                     │
 │  │ - Embeddings         │                     │
 │  │ - Vector Store       │                     │
@@ -70,21 +70,21 @@ cp .env.example .env
 docker compose up -d --build
 
 # Check health of all services
-curl http://localhost:8080/health  # LightSpeed Core
-curl http://localhost:8000/health  # MCP Discovery
-curl http://localhost:8001/health  # Embedding Service
+curl http://localhost:8000/health  # LightSpeed Core
+curl http://localhost:8001/health  # MCP Discovery
+curl http://localhost:8002/health  # Embedding Service
 ```
 
 Services will be available at:
-- **LightSpeed Stack**: http://localhost:8080
-- **MCP Discovery**: http://localhost:8000
-- **Embedding Service**: http://localhost:8001
+- **LightSpeed Stack**: http://localhost:8000
+- **MCP Discovery**: http://localhost:8001
+- **Embedding Service**: http://localhost:8002
 
 **Note**: Docker Compose simulates the Kubernetes sidecar architecture using `network_mode: "service:lightspeed-stack"`. All services share the same network namespace and communicate via `localhost`.
 
 ## Services
 
-### 1. LightSpeed Stack (Port 8080)
+### 1. LightSpeed Stack (Port 8000)
 Main AI assistant service powered by Google Vertex AI.
 
 **Key Features:**
@@ -93,7 +93,7 @@ Main AI assistant service powered by Google Vertex AI.
 - Conversation caching
 - MCP tool discovery integration
 
-### 2. MCP Discovery Service (Port 8000)
+### 2. MCP Discovery Service (Port 8001)
 Discovers and indexes MCP tools from configured servers, exposing them via the MCP protocol.
 
 **Key Features:**
@@ -104,7 +104,7 @@ Discovers and indexes MCP tools from configured servers, exposing them via the M
 
 📖 **[Full Documentation](./mcp-discovery-service/README.md)**
 
-### 3. Embedding Service (Port 8001)
+### 3. Embedding Service (Port 8002)
 Unified service for text embeddings and vector storage.
 
 **Key Features:**
@@ -155,15 +155,15 @@ In Kubernetes/OpenShift, this is managed via ConfigMap (mounted as lightspeed-st
 
 ```bash
 # Check all services
-curl http://localhost:8080/health  # LightSpeed Core
-curl http://localhost:8000/health  # MCP Discovery
-curl http://localhost:8001/health  # Embedding Service
+curl http://localhost:8000/health  # LightSpeed Core
+curl http://localhost:8001/health  # MCP Discovery
+curl http://localhost:8002/health  # Embedding Service
 ```
 
 ### Test the AI Assistant
 
 ```bash
-curl -X POST http://localhost:8080/v1/query \
+curl -X POST http://localhost:8000/v1/query \
   -H "Content-Type: application/json" \
   -H "x-rh-identity: test" \
   -d '{
@@ -205,7 +205,7 @@ cd embedding-service
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn main:app --reload --port 8001
+uvicorn main:app --reload --port 8002
 
 # MCP Discovery Service
 cd mcp-discovery-service
@@ -234,9 +234,9 @@ docker-compose down             # Stop services
 See [config/clowdapp.yaml](./config/clowdapp.yaml) for deployment configuration.
 
 All three services run as containers in a single pod:
-- **lightspeed-stack** (main container) - Port 8080 exposed publicly
-- **mcp-discovery-service** (sidecar) - Port 8000 internal
-- **embedding-service** (sidecar) - Port 8001 internal
+- **lightspeed-stack** (main container) - Port 8000 exposed publicly
+- **mcp-discovery-service** (sidecar) - Port 8001 internal
+- **embedding-service** (sidecar) - Port 8002 internal
 
 ```bash
 # Deploy to OpenShift
@@ -269,10 +269,10 @@ docker-compose logs embedding-service
 **Quick checks:**
 ```bash
 # Verify embedding service is healthy
-curl http://localhost:8001/health
+curl http://localhost:8002/health
 
 # Check if MCP discovery can reach it (via localhost in sidecar)
-docker-compose exec mcp-discovery-service curl http://localhost:8001/health
+docker-compose exec mcp-discovery-service curl http://localhost:8002/health
 
 # Verify environment variable
 docker-compose exec mcp-discovery-service env | grep ENABLE_VECTOR_STORE

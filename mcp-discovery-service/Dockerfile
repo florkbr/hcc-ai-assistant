@@ -15,7 +15,7 @@ RUN mkdir -p /app-root/data
 # Default host and port (can be overridden via env vars)
 # HOST: 0.0.0.0 for IPv4, :: for IPv6/dual-stack
 ENV HOST=0.0.0.0
-ENV PORT=8000
+ENV PORT=8001
 
 # Expose MCP protocol port
 EXPOSE ${PORT}

@@ -7,9 +7,9 @@
         context: .
         dockerfile: Dockerfile
       ports:
-        - "3000:8080"  # Main API
-        - "8000:8000"   # MCP Discovery service (sidecar)
-        - "8001:8001"   # Embedding service (sidecar)
+        - "8000:8000"  # Main API
+        - "8001:8001"   # MCP Discovery service (sidecar)
+        - "8002:8002"   # Embedding service (sidecar)
       environment:
         - VERTEX_PROJECT=${VERTEX_PROJECT}
         - VERTEX_LOCATION=us-central1
@@ -26,7 +26,7 @@
       volumes:
         - ./service-account-key.json:/app/service-account-key.json:ro
       healthcheck:
-        test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+        test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8000' || exit 1"]
         interval: 10s
         timeout: 5s
         retries: 5
@@ -42,12 +42,12 @@
       restart: on-failure
       environment:
         - HOST=0.0.0.0
-        - PORT=8001
+        - PORT=8002
         - LOG_LEVEL=INFO
       volumes:
         - chromadb-data:/app/data
       healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+        test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
         interval: 10s
         timeout: 5s
         retries: 5
@@ -64,13 +64,13 @@
       restart: on-failure
       environment:
         - HOST=0.0.0.0
-        - PORT=8000
+        - PORT=8001
         - LOG_LEVEL=INFO
         - MCP_CONFIG_PATH=/app-root/lightspeed-stack.yaml
         - REFRESH_INTERVAL_MINUTES=5
         - ENABLE_VECTOR_STORE=true
         # Uses localhost since we share network namespace with lightspeed-stack
-        - EMBEDDING_SERVICE_URL=http://localhost:8001
+        - EMBEDDING_SERVICE_URL=http://localhost:8002
         - CAPABILITIES_CACHE_PATH=/app-root/data/mcp-capabilities.json
         - VECTOR_STORE_ID=mcp-capabilities-store
         - EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2 # nomic-ai/nomic-embed-text-v1.5 requires remote code execution
@@ -78,7 +78,7 @@
         - ./lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro
         - mcp-data:/app-root/data
       healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+        test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
         interval: 10s
         timeout: 5s
         retries: 5

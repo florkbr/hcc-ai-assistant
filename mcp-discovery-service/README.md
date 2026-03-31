@@ -34,11 +34,11 @@ python main.py
 ```bash
 docker build -t mcp-discovery-service:latest .
 
-# Run with defaults (host=0.0.0.0, port=8000)
-docker run -p 8000:8000 \
+# Run with defaults (host=0.0.0.0, port=8001)
+docker run -p 8001:8001 \
   -v $(pwd)/../lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro \
   -e ENABLE_VECTOR_STORE=true \
-  -e EMBEDDING_SERVICE_URL=http://embedding-service:8001 \
+  -e EMBEDDING_SERVICE_URL=http://embedding-service:8002 \
   mcp-discovery-service:latest
 
 # Override port
@@ -48,7 +48,7 @@ docker run -p 9000:9000 \
   mcp-discovery-service:latest
 
 # Use IPv6/dual-stack
-docker run -p 8000:8000 \
+docker run -p 8001:8001 \
   -e HOST=:: \
   -v $(pwd)/../lightspeed-stack.yaml:/app-root/lightspeed-stack.yaml:ro \
   mcp-discovery-service:latest
@@ -64,14 +64,14 @@ docker-compose up -d --build
 docker-compose logs -f mcp-discovery-service
 
 # Test health endpoint (via lightspeed-stack's exposed ports)
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 ```
 
 **Note**: In docker-compose, all services share lightspeed-stack's network namespace using `network_mode`. Services communicate via `localhost` instead of service names.
 
 ## MCP Protocol
 
-The service runs a full MCP protocol server on port 8000 (FastMCP default) using Streamable HTTP transport from the official Python MCP SDK.
+The service runs a full MCP protocol server on port 8001 using Streamable HTTP transport from the official Python MCP SDK.
 
 ### Health Check Endpoint
 
@@ -126,13 +126,13 @@ Environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | Server host (use `::` for IPv6/dual-stack) |
-| `PORT` | `8000` | Server port |
+| `PORT` | `8001` | Server port |
 | `MCP_CONFIG_PATH` | `/app-root/lightspeed-stack.yaml` | MCP servers config (reads mcp_servers section) |
 | `CAPABILITIES_CACHE_PATH` | `/app-root/data/mcp-capabilities.json` | JSON cache file for capabilities |
 | `REFRESH_INTERVAL_MINUTES` | 5 | Auto-refresh interval |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `ENABLE_VECTOR_STORE` | `false` | Enable semantic search via ChromaDB |
-| `EMBEDDING_SERVICE_URL` | `http://localhost:8001` | Embedding service URL (localhost in K8s/sidecar) |
+| `EMBEDDING_SERVICE_URL` | `http://localhost:8002` | Embedding service URL (localhost in K8s/sidecar) |
 | `VECTOR_STORE_ID` | `mcp-capabilities-store` | ChromaDB vector store ID |
 | `EMBEDDING_MODEL` | `sentence-transformers/all-mpnet-base-v2` | Embedding model |
 
@@ -164,21 +164,21 @@ In production, all services run in a single pod as sidecars, communicating via `
 │ Pod: hcc-ai-assistant                          │
 │                                                │
 │  ┌──────────────────────┐                     │
-│  │ Container: api       │  port 8080          │
+│  │ Container: api       │  port 8000          │
 │  │ (lightspeed-stack)   │◄────────────────────┤─ Public
 │  └───────┬──────────────┘                     │
-│          │ localhost:8000/mcp                 │
+│          │ localhost:8001/mcp                 │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: mcp-disc    │  port 8000          │
+│  │ Sidecar: mcp-disc    │  port 8001          │
 │  │ (Python/FastMCP)     │                     │
 │  │ - MCP Server         │                     │
 │  │ - 4 MCP Tools        │                     │
 │  └───────┬──────────────┘                     │
-│          │ localhost:8001                     │
+│          │ localhost:8002                     │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: embedding-service │  port 8001          │
+│  │ Sidecar: embedding-service │  port 8002          │
 │  │ (Python)             │                     │
 │  │ - Embeddings         │                     │
 │  │ - Vector Store       │                     │
@@ -320,11 +320,11 @@ See `config/clowdapp.yaml` for deployment configuration.
 **Solution**:
 ```bash
 # Check if embedding-service is reachable (via localhost in sidecar setup)
-curl http://localhost:8001/health
+curl http://localhost:8002/health
 
 # Check environment variables
 echo $ENABLE_VECTOR_STORE  # Should be "true"
-echo $EMBEDDING_SERVICE_URL  # Should be "http://localhost:8001"
+echo $EMBEDDING_SERVICE_URL  # Should be "http://localhost:8002"
 
 # Check logs
 docker-compose logs mcp-discovery-service | grep -i vector
@@ -352,12 +352,12 @@ docker-compose logs mcp-discovery-service | grep -i discover
 
 **Solution**:
 ```bash
-# Verify MCP server is running (port 8000, exposed via lightspeed-stack)
-curl http://localhost:8000/health
+# Verify MCP server is running (port 8001, exposed via lightspeed-stack)
+curl http://localhost:8001/health
 
 # Check MCP port in docker-compose
 docker-compose ps
 
 # In sidecar setup, verify connectivity via localhost
-docker-compose exec lightspeed-stack curl http://localhost:8000/health
+docker-compose exec lightspeed-stack curl http://localhost:8001/health
 ```

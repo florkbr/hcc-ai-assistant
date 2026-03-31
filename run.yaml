@@ -58,7 +58,7 @@ providers:
     provider_type: inline::rag-runtime
   # Uses localhost since mcp-discovery-service runs as a sidecar in the same pod
   - config:
-      url: http://localhost:8000/mcp
+      url: http://localhost:8001/mcp
     provider_id: mcp-discovery-provider
     provider_type: remote::model-context-protocol
   - config:

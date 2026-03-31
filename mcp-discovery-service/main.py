@@ -37,7 +37,7 @@ class Config:
 
     # Server configuration
     HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("PORT", "8000"))
+    PORT: int = int(os.getenv("PORT", "8001"))
 
     # MCP configuration
     MCP_CONFIG_PATH: str = os.getenv("MCP_CONFIG_PATH", "/app-root/lightspeed-stack.yaml")
@@ -46,7 +46,7 @@ class Config:
 
     # Vector store configuration
     ENABLE_VECTOR_STORE: bool = os.getenv("ENABLE_VECTOR_STORE", "").lower() in ("true", "1")
-    EMBEDDING_SERVICE_URL: str = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8001")
+    EMBEDDING_SERVICE_URL: str = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8002")
     VECTOR_STORE_ID: str = os.getenv("VECTOR_STORE_ID", "mcp-capabilities-store")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
 
