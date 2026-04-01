@@ -56,6 +56,11 @@ providers:
   - config: {} # Enable the RAG tool
     provider_id: rag-runtime
     provider_type: inline::rag-runtime
+  # TODO: Move to environment-specific config via ClowdApp params/env vars
+  - config:
+      url: http://rbac-service.rbac-prod.svc.cluster.local:8000/_private/_a2s/mcp/
+    provider_id: rbac-mcp-provider
+    provider_type: remote::model-context-protocol
   # Uses localhost since mcp-discovery-service runs as a sidecar in the same pod
   - config:
       url: http://localhost:8001/mcp
