@@ -1,8 +1,8 @@
 name: Lightspeed Core Service (LCS)
 service:
   host: 0.0.0.0
-  port: 8000
-  base_url: http://localhost:8000
+  port: 8080
+  base_url: http://localhost:8080
   auth_enabled: false
   workers: 1
   color_log: true

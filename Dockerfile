@@ -12,8 +12,8 @@ RUN chgrp -R 0 /app-root && chmod -R g=u /app-root
 
 USER 1001
 
-# Copy YAML templates and entrypoint script
+# Copy YAML templates, entrypoint, and reverse proxy
 COPY run.yaml lightspeed-stack.yaml /app/
-COPY entrypoint.py /app/
+COPY entrypoint.py proxy.py /app/
 
 ENTRYPOINT ["python3.12", "/app/entrypoint.py"]

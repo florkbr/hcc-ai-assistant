@@ -1,7 +1,11 @@
 """Entrypoint script that populates YAML config templates from environment
-variables and Clowder ACG config, then starts lightspeed-stack."""
+variables and Clowder ACG config, then starts lightspeed-stack behind a
+reverse proxy that strips the /api/ai-assistant path prefix."""
 
 import os
+import signal
+import subprocess
+import sys
 
 import yaml
 
@@ -88,7 +92,10 @@ def apply_clowder_config(run_config, stack_config, clowder):
 
 
 def render_configs(clowder):
-    """Read template YAMLs, apply Clowder config, write to runtime dir."""
+    """Read template YAMLs, apply Clowder config, write to runtime dir.
+
+    Returns the rendered stack config so callers can read values from it.
+    """
     os.makedirs(RUNTIME_DIR, exist_ok=True)
 
     run_template = os.path.join(TEMPLATE_DIR, RUN_YAML)
@@ -114,14 +121,47 @@ def render_configs(clowder):
     print(f"[entrypoint] Wrote {run_out}")
     print(f"[entrypoint] Wrote {stack_out}")
 
+    return stack_config
+
 
 def main():
     clowder = load_clowder_config()
-    render_configs(clowder)
+    stack_config = render_configs(clowder)
 
-    # Exec lightspeed-stack
-    print("[entrypoint] Starting lightspeed-stack...")
-    os.execvp("python3.12", ["python3.12", "src/lightspeed_stack.py"])
+    # Read backend host/port from the rendered lightspeed-stack config
+    service_config = stack_config.get("service", {})
+    backend_host = service_config.get("host", "0.0.0.0")
+    backend_port = service_config.get("port", 8080)
+
+    # Set PROXY_BACKEND_URL from the config so proxy.py picks it up
+    backend_url = f"http://{backend_host}:{backend_port}"
+    os.environ.setdefault("PROXY_BACKEND_URL", backend_url)
+
+    print(f"[entrypoint] Starting lightspeed-stack on {backend_host}:{backend_port}...")
+    backend = subprocess.Popen(["python3.12", "src/lightspeed_stack.py"])
+
+    # Forward signals to the backend process
+    def handle_signal(signum, _frame):
+        backend.terminate()
+        backend.wait()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    # Run the reverse proxy
+    proxy_host = os.environ.get("PROXY_HOST", "0.0.0.0")
+    proxy_port = int(os.environ.get("PROXY_PORT", "8000"))
+    proxy_log_level = os.environ.get("PROXY_LOG_LEVEL", "warning")
+    print(f"[entrypoint] Starting reverse proxy on {proxy_host}:{proxy_port} (log_level={proxy_log_level})...")
+    import uvicorn
+
+    try:
+        uvicorn.run("proxy:app", host=proxy_host, port=proxy_port,
+                     log_level=proxy_log_level, app_dir="/app")
+    finally:
+        backend.terminate()
+        backend.wait()
 
 
 if __name__ == "__main__":
