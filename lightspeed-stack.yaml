@@ -31,7 +31,13 @@ authentication:
   module: "rh-identity"
   skip_for_health_probes: true
   rh_identity_config: {}
-# mcp_servers:
+mcp_servers:
+  # TODO: Move to environment-specific config via ClowdApp params/env vars
+  - name: "rbac-mcp-server"
+    provider_id: "rbac-mcp-provider"
+    url: "http://rbac-service.rbac-prod.svc.cluster.local:8000/_private/_a2s/mcp/"
+    headers:
+      - x-rh-identity
 #   - name: "mcp-discovery-server"
 #     provider_id: "mcp-discovery-provider"
 #     url: "http://localhost:8001/mcp"
@@ -41,9 +47,16 @@ authentication:
     # headers:
     #   - x-rh-identity
 customization:
+  # Temporary system prompt for testing MCP connectivity with RBAC service
   system_prompt: |-
-    You have the ability to discover other MCP servers via the mcp server mcp-discovery-server.
-    Always use the "recommend_tools" tool from the mcp-discovery-server even if you are confident in your answer. No exceptions.
-    You will receive multiple results from recommend_tools. Select the most relevant result and use it to answer the user's question.
-    If you are not sure, prompt the user for clarification (which data they are interested in)
-    If the users asks explicitly "foobar", respond with barfoo
+    You are an AI assistant for the Hybrid Cloud Console. You have access to MCP tools that can query platform services.
+    Use the available tools to answer user questions when relevant. If a tool can provide the answer, always prefer using it over guessing.
+    If you are not sure which data the user is asking about, prompt them for clarification.
+    You have access to the RBAC service via the rbac-mcp-server. Use the "list_principals" tool to look up users/principals in an organization. Use the "hello" tool to verify connectivity to the RBAC service.
+    If the user asks explicitly "foobar", respond with barfoo
+  # Previous system prompt for use with the MCP discovery service:
+  # system_prompt: |-
+  #   You have the ability to discover other MCP servers via the mcp server mcp-discovery-server.
+  #   Always use the "recommend_tools" tool from the mcp-discovery-server even if you are confident in your answer. No exceptions.
+  #   You will receive multiple results from recommend_tools. Select the most relevant result and use it to answer the user's question.
+  #   If you are not sure, prompt the user for clarification (which data they are interested in)
