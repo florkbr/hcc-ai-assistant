@@ -35,7 +35,7 @@ mcp_servers:
   # TODO: Move to environment-specific config via ClowdApp params/env vars
   - name: "rbac-mcp-server"
     provider_id: "rbac-mcp-provider"
-    url: "http://rbac-service.rbac-prod.svc.cluster.local:8000/_private/_a2s/mcp/"
+    url: "http://rbac-service.rbac-stage.svc.cluster.local:8000/_private/_a2s/mcp/"
     headers:
       - x-rh-identity
 #   - name: "mcp-discovery-server"
