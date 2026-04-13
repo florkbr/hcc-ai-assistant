@@ -61,6 +61,10 @@ providers:
       url: http://rbac-service.rbac-stage.svc.cluster.local:8000/_private/_a2s/mcp/
     provider_id: rbac-mcp-provider
     provider_type: remote::model-context-protocol
+  - config:
+      url: http://notifications-mcp-service.notifications-stage.svc.cluster.local:8000/mcp/
+    provider_id: notifications-mcp-provider
+    provider_type: remote::model-context-protocol
   # Uses localhost since mcp-discovery-service runs as a sidecar in the same pod
   - config:
       url: http://localhost:8001/mcp

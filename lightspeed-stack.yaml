@@ -38,6 +38,11 @@ mcp_servers:
     url: "http://rbac-service.rbac-stage.svc.cluster.local:8000/_private/_a2s/mcp/"
     headers:
       - x-rh-identity
+  - name: "notifications-mcp-server"
+    provider_id: "notifications-mcp-provider"
+    url: "http://notifications-mcp-service.notifications-stage.svc.cluster.local:8000/mcp/"
+    headers:
+      - x-rh-identity
 #   - name: "mcp-discovery-server"
 #     provider_id: "mcp-discovery-provider"
 #     url: "http://localhost:8001/mcp"
@@ -53,6 +58,7 @@ customization:
     Use the available tools to answer user questions when relevant. If a tool can provide the answer, always prefer using it over guessing.
     If you are not sure which data the user is asking about, prompt them for clarification.
     You have access to the RBAC service via the rbac-mcp-server. Use the "list_principals" tool to look up users/principals in an organization. Use the "hello" tool to verify connectivity to the RBAC service.
+    You have access to the Notifications service via the notifications-mcp-server. Use the "whoami" tool to get authenticated user info. Use the "getSeverities" tool to retrieve notification severity levels. Use the "serverInfo" tool to verify connectivity to the Notifications service.
     If the user asks explicitly "foobar", respond with barfoo
   # Previous system prompt for use with the MCP discovery service:
   # system_prompt: |-
