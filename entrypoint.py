@@ -147,6 +147,13 @@ def set_db_env_vars(clowder):
     os.environ.setdefault("PGPASSWORD", db.password)
     os.environ.setdefault("PGSSLMODE", ssl_mode)
 
+    # The embedding service uses psycopg2 which reads PGSSLROOTCERT for the
+    # CA cert path when sslmode=verify-full. The cert is written to
+    # /tmp/rds-ca.crt by apply_clowder_config().
+    rds_ca = getattr(db, "rdsCa", None)
+    if rds_ca:
+        os.environ.setdefault("PGSSLROOTCERT", "/tmp/rds-ca.crt")
+
     print(f"[entrypoint] Set PG* env vars for embedding service ({db.hostname}:{db.port}/{db.name})")
 
 

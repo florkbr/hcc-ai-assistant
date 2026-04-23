@@ -18,8 +18,14 @@ RUN pip3.12 install "uv>=0.8.15" && \
         "mcp[cli]==1.26.0" \
         "httpx>=0.27.0"
 
-# Pre-download the embedding model into the image (~420MB)
+# Pre-download the embedding model into the image (~420MB).
+# HF_HOME must be set before download so the cache lands in a group-writable
+# location accessible by OpenShift's random UID.
+ENV HF_HOME=/app-root/hf_cache
 RUN python3.12 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-mpnet-base-v2')"
+
+# Never reach out to HuggingFace at runtime — use only the pre-baked model.
+ENV TRANSFORMERS_OFFLINE=1
 
 # OpenShift runs containers with a random UID in group 0 (root).
 # Make /app-root writable by group 0 so the entrypoint can write rendered configs.
