@@ -184,6 +184,11 @@ def main():
     # Export DB config as env vars for the embedding service subprocess
     set_db_env_vars(clowder)
 
+    # Run database migrations before starting any services
+    from migrations import run_migrations
+
+    run_migrations()
+
     # Track all child processes for cleanup
     children = []
 

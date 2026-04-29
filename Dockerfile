@@ -1,4 +1,4 @@
-FROM registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9:f271b085e4c77f2f9af92d43dc0a37afe7036748
+FROM registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9:latest
 
 USER root
 
@@ -35,7 +35,7 @@ USER 1001
 
 # Copy YAML templates, entrypoint, and reverse proxy
 COPY run.yaml lightspeed-stack.yaml /app/
-COPY entrypoint.py proxy.py /app/
+COPY entrypoint.py proxy.py migrations.py /app/
 
 # Copy embedding service and MCP discovery service source files
 COPY embedding-service/main.py /app/embedding-service/main.py
