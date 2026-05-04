@@ -28,6 +28,21 @@ async def lifespan(app):
     await app.state.client.aclose()
 
 
+async def liveness(request: Request) -> Response:
+    return Response("OK", status_code=200)
+
+
+async def readiness(request: Request) -> Response:
+    client = request.app.state.client
+    try:
+        resp = await client.get(f"{BACKEND_URL}/health", timeout=5.0)
+        if resp.status_code == 200:
+            return Response("OK", status_code=200)
+    except httpx.ConnectError:
+        pass
+    return Response("Backend not ready", status_code=503)
+
+
 async def proxy_request(request: Request) -> Response:
     """Forward a request to the backend, stripping the path prefix."""
     path = request.url.path
@@ -86,6 +101,8 @@ _methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
 app = Starlette(
     lifespan=lifespan,
     routes=[
+        Route("/liveness", liveness),
+        Route("/readiness", readiness),
         Route("/", proxy_request, methods=_methods),
         Route("/{path:path}", proxy_request, methods=_methods),
     ],
