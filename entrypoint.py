@@ -23,7 +23,7 @@ STACK_YAML = "lightspeed-stack.yaml"
 
 def load_clowder_config():
     """Load Clowder ACG config if CLOWDER_ENABLED is set."""
-    if not os.environ.get("CLOWDER_ENABLED", "").lower() in ("true", "1", "yes"):
+    if os.environ.get("CLOWDER_ENABLED", "").lower() not in ("true", "1", "yes"):
         print("[entrypoint] CLOWDER_ENABLED not set, skipping Clowder config")
         return None
 

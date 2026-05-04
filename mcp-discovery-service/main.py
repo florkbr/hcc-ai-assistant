@@ -7,18 +7,16 @@ import json
 import logging
 import os
 import traceback
-from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 import httpx
-import yaml
-from pydantic import BaseModel
 
 # MCP SDK imports
-import mcp.types as types
+import yaml
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from pydantic import BaseModel
 
 # Import MCP server module
 from mcp_server import MCPDiscoveryServer
@@ -70,11 +68,11 @@ class MCPCapability(BaseModel):
     server_name: str
     tool_name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
 class MCPServersConfig(BaseModel):
     """MCP servers YAML configuration"""
-    mcp_servers: List[MCPServer] = []  # Default to empty list if not provided
+    mcp_servers: list[MCPServer] = []  # Default to empty list if not provided
 
 # ============================================================================
 # VECTOR STORE CLIENT
@@ -89,7 +87,7 @@ class VectorStoreClient:
         self.embedding_model = embedding_model
         self.client = httpx.AsyncClient(timeout=30.0)
 
-    async def generate_embedding(self, text: str) -> List[float]:
+    async def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text"""
         try:
             response = await self.client.post(
@@ -107,7 +105,7 @@ class VectorStoreClient:
             raise
 
     # TODO: each sync track old capabilities, make new ones available - compare new to old and prune old tools (or else db will grow unbounded)
-    async def insert_capabilities(self, capabilities: List[MCPCapability]) -> None:
+    async def insert_capabilities(self, capabilities: list[MCPCapability]) -> None:
         """Insert capabilities into vector store"""
         if not capabilities:
             return
@@ -161,7 +159,7 @@ class VectorStoreClient:
             logger.error(f"Error inserting capabilities: {e}")
             raise
 
-    async def search_similar(self, query: str, k: int = 10) -> List[MCPCapability]:
+    async def search_similar(self, query: str, k: int = 10) -> list[MCPCapability]:
         """Search for similar capabilities using vector similarity"""
         try:
             # Generate query embedding
@@ -208,9 +206,9 @@ class MCPIndexer:
     """Manages discovery and indexing of MCP capabilities"""
 
     def __init__(self):
-        self.capabilities: List[MCPCapability] = []
+        self.capabilities: list[MCPCapability] = []
         self.last_refresh_time: datetime = datetime.now()
-        self.vector_store: Optional[VectorStoreClient] = None
+        self.vector_store: VectorStoreClient | None = None
 
         # Initialize vector store if enabled
         if config.ENABLE_VECTOR_STORE:
@@ -230,7 +228,7 @@ class MCPIndexer:
     def load_config(self) -> MCPServersConfig:
         """Load MCP servers configuration from YAML"""
         try:
-            with open(config.MCP_CONFIG_PATH, 'r') as f:
+            with open(config.MCP_CONFIG_PATH) as f:
                 data = yaml.safe_load(f)
                 # Handle case where mcp_servers is None (all entries commented out)
                 if data and data.get('mcp_servers') is None:
@@ -240,7 +238,7 @@ class MCPIndexer:
             logger.error(f"Error loading config: {e}")
             raise
 
-    async def discover_capabilities(self, server: MCPServer) -> List[MCPCapability]:
+    async def discover_capabilities(self, server: MCPServer) -> list[MCPCapability]:
         """Discover capabilities from an MCP server using MCP protocol"""
         try:
             logger.info(f"Connecting to MCP server: {server.name} ({server.url})")
@@ -332,7 +330,7 @@ class MCPIndexer:
         except Exception as e:
             logger.warning(f"Failed to save capabilities cache to disk: {e}")
 
-    def search_keyword(self, query: str, limit: int = 10) -> List[MCPCapability]:
+    def search_keyword(self, query: str, limit: int = 10) -> list[MCPCapability]:
         """Keyword-based search (fallback)"""
         query_lower = query.lower()
         results = []
@@ -347,7 +345,7 @@ class MCPIndexer:
 
         return results
 
-    async def search(self, query: str, limit: int = 10) -> tuple[List[MCPCapability], str]:
+    async def search(self, query: str, limit: int = 10) -> tuple[list[MCPCapability], str]:
         """Search with semantic search + keyword fallback"""
         results = []
         method = "keyword search"
@@ -403,7 +401,7 @@ async def background_refresh():
 # ============================================================================
 
 # Create MCP server instance (will be initialized after indexer is ready)
-mcp_server_instance: Optional[MCPDiscoveryServer] = None
+mcp_server_instance: MCPDiscoveryServer | None = None
 
 # ============================================================================
 # MAIN ENTRY POINT

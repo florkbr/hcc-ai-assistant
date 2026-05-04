@@ -2,21 +2,12 @@
 Tests for MCP Discovery Service - Main Module
 Uses pytest with modern best practices and fixtures for test setup.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 import json
-from datetime import datetime
-from httpx import AsyncClient
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from main import (
-    Config,
-    MCPServer,
-    MCPCapability,
-    MCPServersConfig,
-    VectorStoreClient,
-    MCPIndexer
-)
+import pytest
 
+from main import Config, MCPCapability, MCPIndexer, MCPServer, MCPServersConfig, VectorStoreClient
 
 # ============================================================================
 # TEST DATA FIXTURES
@@ -150,6 +141,7 @@ def test_config_from_env(monkeypatch):
 
     # Need to reload the module to pick up new env vars
     import importlib
+
     import main as main_module
     importlib.reload(main_module)
 

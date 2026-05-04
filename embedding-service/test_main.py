@@ -2,12 +2,11 @@
 Tests for Embedding Service
 Uses pytest with modern best practices and fixtures for test setup.
 """
-import json
-import pytest
-from unittest.mock import MagicMock, patch, call
-import numpy as np
-from httpx import AsyncClient, ASGITransport
+from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
+from httpx import ASGITransport, AsyncClient
 
 # ============================================================================
 # MOCK FIXTURES

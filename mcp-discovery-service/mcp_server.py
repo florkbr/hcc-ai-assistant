@@ -4,7 +4,6 @@ Exposes discovery tools via MCP protocol on port 8082
 """
 import json
 import logging
-from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -48,7 +47,7 @@ class MCPDiscoveryServer:
             return f"Found {len(results)} MCP tools matching '{query}' (via {method}):\n\n{results_json}"
 
         @self.mcp.tool()
-        async def list_all_capabilities(server_name: Optional[str] = None) -> str:
+        async def list_all_capabilities(server_name: str | None = None) -> str:
             """List all discovered MCP capabilities, optionally filtered by server name.
 
             Args:
@@ -66,7 +65,7 @@ class MCPDiscoveryServer:
             return f"Total MCP capabilities: {len(capabilities)}\nLast refresh: {self.indexer.last_refresh_time.isoformat()}\n\n{capabilities_json}"
 
         @self.mcp.tool()
-        async def get_tool_schema(tool_name: str, server_name: Optional[str] = None) -> str:
+        async def get_tool_schema(tool_name: str, server_name: str | None = None) -> str:
             """Get detailed schema for a specific MCP tool.
 
             Args:

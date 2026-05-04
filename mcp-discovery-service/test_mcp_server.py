@@ -2,14 +2,13 @@
 Tests for MCP Discovery Server - MCP Protocol Implementation
 Uses pytest with modern best practices and fixtures for test setup.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-import json
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
-from mcp_server import MCPDiscoveryServer
+import pytest
+
 from main import MCPCapability, MCPIndexer
-
+from mcp_server import MCPDiscoveryServer
 
 # ============================================================================
 # TEST DATA FIXTURES

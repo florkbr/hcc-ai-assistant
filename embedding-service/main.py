@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import List, Dict, Any
+from typing import Any
 
 import psycopg2
 import psycopg2.extras
@@ -38,15 +38,15 @@ db_pool = None
 
 # Embedding models
 class EmbeddingRequest(BaseModel):
-    input: List[str]
+    input: list[str]
     model: str = "sentence-transformers/all-mpnet-base-v2"
 
 class EmbeddingData(BaseModel):
-    embedding: List[float]
+    embedding: list[float]
     index: int
 
 class EmbeddingResponse(BaseModel):
-    data: List[EmbeddingData]
+    data: list[EmbeddingData]
     model: str
     usage: dict = {"total_tokens": 0}
 
@@ -54,26 +54,26 @@ class EmbeddingResponse(BaseModel):
 class VectorDocument(BaseModel):
     document_id: str
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 class InsertRequest(BaseModel):
     vector_store_id: str
-    documents: List[VectorDocument]
-    embeddings: List[List[float]]
+    documents: list[VectorDocument]
+    embeddings: list[list[float]]
 
 class QueryRequest(BaseModel):
     vector_store_id: str
-    query: List[float]
+    query: list[float]
     k: int = 10
 
 class QueryResult(BaseModel):
     document_id: str
     score: float
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 class QueryResponse(BaseModel):
-    results: List[QueryResult]
+    results: list[QueryResult]
 
 # ============================================================================
 # DATABASE HELPERS
