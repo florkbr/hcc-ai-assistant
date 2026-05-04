@@ -188,7 +188,7 @@ spec:
             echo "Installing ruff..."
             pip install --quiet ruff
             echo "Running ruff linting..."
-            ruff check . || {
+            ruff check --no-cache . || {
               echo "Ruff linting failed. Please run 'ruff check --fix .' locally to fix issues."
               exit 1
             }
