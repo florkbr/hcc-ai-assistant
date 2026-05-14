@@ -6,6 +6,7 @@ Combines:
 - Text embedding generation (sentence-transformers)
 - Vector storage and similarity search (pgvector on PostgreSQL)
 """
+import asyncio
 import json
 import logging
 import os
@@ -260,8 +261,11 @@ async def create_embeddings(request: EmbeddingRequest):
     try:
         logger.info(f"Generating embeddings for {len(request.input)} texts")
 
-        # Generate embeddings
-        embeddings = embedding_model.encode(request.input, convert_to_numpy=True)
+        # Generate embeddings (run in thread to avoid blocking the event loop)
+        embeddings = await asyncio.to_thread(
+            embedding_model.encode, request.input,
+            convert_to_numpy=True, show_progress_bar=False
+        )
 
         # Format response to match llama-stack API
         data = [

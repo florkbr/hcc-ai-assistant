@@ -50,6 +50,7 @@ class Config:
     EMBEDDING_SERVICE_URL: str = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8002")
     VECTOR_STORE_ID: str = os.getenv("VECTOR_STORE_ID", "mcp-capabilities-store")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
+    EMBEDDING_SERVICE_TIMEOUT: int = int(os.getenv("EMBEDDING_SERVICE_TIMEOUT", "120"))
 
 config = Config()
 
@@ -85,7 +86,7 @@ class VectorStoreClient:
         self.base_url = base_url.rstrip("/")
         self.vector_store_id = vector_store_id
         self.embedding_model = embedding_model
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.client = httpx.AsyncClient(timeout=float(config.EMBEDDING_SERVICE_TIMEOUT))
 
     async def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text"""
