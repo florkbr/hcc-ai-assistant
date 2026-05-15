@@ -18,7 +18,7 @@ def mock_sentence_transformer():
     mock_model = MagicMock()
 
     # Make encode return embeddings based on input length
-    def dynamic_encode(texts, convert_to_numpy=True):
+    def dynamic_encode(texts, convert_to_numpy=True, **kwargs):
         embeddings = np.array([
             [0.1 * (i+1), 0.2 * (i+1), 0.3 * (i+1)]
             for i in range(len(texts))
