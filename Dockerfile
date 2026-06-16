@@ -1,4 +1,4 @@
-FROM registry.redhat.io/lightspeed-core/lightspeed-stack-rhel9:latest
+FROM quay.io/rh-ee-jboos/test-lightspeed-stack:lcore-2503
 
 USER root
 
