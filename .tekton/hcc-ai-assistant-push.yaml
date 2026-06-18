@@ -191,7 +191,7 @@ spec:
             #!/bin/bash
             set -e
 
-            SERVICES="embedding-service mcp-discovery-service .claude/skills/post-pr"
+            SERVICES="embedding-service mcp-discovery-service"
             failed=""
 
             for svc in $SERVICES; do
