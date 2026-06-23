@@ -31,6 +31,37 @@ authentication:
   module: "rh-identity"
   skip_for_health_probes: true
   rh_identity_config: {}
+
+# Authorization: scope conversations to the authenticated user.
+# Without access_rules, LightSpeed Core uses NoopAccessResolver which grants
+# all actions including *_other_conversations — causing every user to see
+# every other user's conversation history.
+# With explicit rules, GenericAccessResolver is used and conversation endpoints
+# filter by user_id (RHCLOUD-48660).
+authorization:
+  access_rules:
+    - role: "*"
+      actions:
+        - "query"
+        - "responses"
+        - "streaming_query"
+        - "get_conversation"
+        - "list_conversations"
+        - "delete_conversation"
+        - "update_conversation"
+        - "feedback"
+        - "get_models"
+        - "get_tools"
+        - "get_shields"
+        - "info"
+        - "list_mcp_servers"
+        - "list_providers"
+        - "get_provider"
+        - "list_rags"
+        - "get_rag"
+        - "read_vector_stores"
+        - "manage_files"
+        - "read_prompts"
 mcp_servers:
   # Dynamic MCP servers are merged from CLOWDER_MCP_SERVER_CONFIGS env var at startup.
   # Only "hard" servers that must always be present belong here.

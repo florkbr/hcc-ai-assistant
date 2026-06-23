@@ -1,6 +1,8 @@
 import json
+import os
 
 import pytest
+import yaml
 
 from entrypoint import load_mcp_server_configs, merge_mcp_servers
 
@@ -194,6 +196,38 @@ class TestMergeMcpServers:
         provider = base_run_config["providers"]["tool_runtime"][0]
         assert provider["config"]["url"] == "http://resolved-host:9999/mcp/"
 
+    def test_authorization_preserved_after_clowder_config(self, monkeypatch, base_run_config):
+        """Authorization access_rules must survive Clowder config application."""
+        from entrypoint import apply_clowder_config
+
+        stack_config = {
+            "conversation_cache": {"type": "sqlite", "sqlite": {"db_path": "/tmp/test.db"}},
+            "authorization": {
+                "access_rules": [
+                    {"role": "*", "actions": ["query", "list_conversations"]}
+                ]
+            },
+        }
+
+        class FakeDB:
+            hostname = "db-host"
+            port = 5432
+            name = "testdb"
+            username = "user"
+            password = "pass"
+            sslMode = "prefer"
+            rdsCa = None
+
+        class FakeClowder:
+            database = FakeDB()
+
+        apply_clowder_config(base_run_config, stack_config, FakeClowder())
+
+        # Authorization section must be preserved after Clowder config application
+        assert "authorization" in stack_config
+        assert len(stack_config["authorization"]["access_rules"]) == 1
+        assert stack_config["authorization"]["access_rules"][0]["role"] == "*"
+
     def test_clowder_no_matching_endpoint(self, monkeypatch, base_run_config, base_stack_config):
         configs = {
             "my-server": {
@@ -217,3 +251,88 @@ class TestMergeMcpServers:
 
         server = base_stack_config["mcp_servers"][0]
         assert server["url"] == "http://fallback/mcp/"
+
+
+# ============================================================================
+# AUTHORIZATION CONFIG VALIDATION TESTS (RHCLOUD-48660)
+# ============================================================================
+
+# Actions that grant cross-user conversation access — must NEVER appear
+# in access_rules for regular users.
+_DANGEROUS_ACTIONS = {
+    "list_other_conversations",
+    "read_other_conversations",
+    "query_other_conversations",
+    "delete_other_conversations",
+    "admin",
+}
+
+# Actions required for the HCC AI Assistant to function.
+_REQUIRED_ACTIONS = {
+    "query",
+    "responses",
+    "streaming_query",
+    "get_conversation",
+    "list_conversations",
+    "delete_conversation",
+    "update_conversation",
+    "feedback",
+    "get_models",
+    "get_tools",
+    "info",
+}
+
+
+class TestAuthorizationConfig:
+    """Validate that lightspeed-stack.yaml authorization rules scope
+    conversations to the authenticated user (RHCLOUD-48660).
+
+    Without explicit access_rules, LightSpeed Core's NoopAccessResolver
+    grants *_other_conversations actions to all users, allowing everyone
+    to see everyone else's conversation history.
+    """
+
+    @pytest.fixture
+    def stack_config(self):
+        config_path = os.path.join(os.path.dirname(__file__), "lightspeed-stack.yaml")
+        with open(config_path) as f:
+            return yaml.safe_load(f)
+
+    def test_authorization_section_exists(self, stack_config):
+        assert "authorization" in stack_config, (
+            "lightspeed-stack.yaml must have an 'authorization' section to enable "
+            "user-scoped conversation access"
+        )
+        assert "access_rules" in stack_config["authorization"]
+        assert len(stack_config["authorization"]["access_rules"]) > 0
+
+    def test_no_cross_user_conversation_actions(self, stack_config):
+        """Ensure no access rule grants actions that bypass user_id filtering."""
+        for rule in stack_config["authorization"]["access_rules"]:
+            granted = set(rule["actions"])
+            dangerous = granted & _DANGEROUS_ACTIONS
+            assert not dangerous, (
+                f"Role '{rule['role']}' must not have actions {dangerous} — "
+                f"these bypass per-user conversation scoping"
+            )
+
+    def test_required_user_actions_present(self, stack_config):
+        """Ensure the wildcard role has all actions needed for the chatbot."""
+        wildcard_rules = [
+            r for r in stack_config["authorization"]["access_rules"]
+            if r["role"] == "*"
+        ]
+        assert wildcard_rules, (
+            "Must have a rule for role '*' (all authenticated rh-identity users)"
+        )
+        granted = set()
+        for rule in wildcard_rules:
+            granted.update(rule["actions"])
+        missing = _REQUIRED_ACTIONS - granted
+        assert not missing, f"Role '*' is missing required actions: {missing}"
+
+    def test_wildcard_role_used_for_rh_identity(self, stack_config):
+        """rh-identity auth assigns all users the '*' role — verify config uses it."""
+        assert stack_config.get("authentication", {}).get("module") == "rh-identity"
+        roles = {r["role"] for r in stack_config["authorization"]["access_rules"]}
+        assert "*" in roles
