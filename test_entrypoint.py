@@ -1,8 +1,6 @@
 import json
-import os
 
 import pytest
-import yaml
 
 from entrypoint import (
     _DANGEROUS_ACTIONS,
