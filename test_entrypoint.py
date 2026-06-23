@@ -4,7 +4,14 @@ import os
 import pytest
 import yaml
 
-from entrypoint import load_mcp_server_configs, merge_mcp_servers
+from entrypoint import (
+    _DANGEROUS_ACTIONS,
+    _FALLBACK_SAFE_ACTIONS,
+    _extract_all_actions,
+    inject_authorization_rules,
+    load_mcp_server_configs,
+    merge_mcp_servers,
+)
 
 
 # ============================================================================
@@ -257,16 +264,6 @@ class TestMergeMcpServers:
 # AUTHORIZATION CONFIG VALIDATION TESTS (RHCLOUD-48660)
 # ============================================================================
 
-# Actions that grant cross-user conversation access — must NEVER appear
-# in access_rules for regular users.
-_DANGEROUS_ACTIONS = {
-    "list_other_conversations",
-    "read_other_conversations",
-    "query_other_conversations",
-    "delete_other_conversations",
-    "admin",
-}
-
 # Actions required for the HCC AI Assistant to function.
 _REQUIRED_ACTIONS = {
     "query",
@@ -283,56 +280,122 @@ _REQUIRED_ACTIONS = {
 }
 
 
-class TestAuthorizationConfig:
-    """Validate that lightspeed-stack.yaml authorization rules scope
-    conversations to the authenticated user (RHCLOUD-48660).
+class TestExtractAllActions:
+    """Validate that _extract_all_actions correctly parses the Action enum."""
 
-    Without explicit access_rules, LightSpeed Core's NoopAccessResolver
-    grants *_other_conversations actions to all users, allowing everyone
-    to see everyone else's conversation history.
+    def test_extracts_actions_from_lightspeed_source(self):
+        """Should find actions when LightSpeed Core source is available."""
+        actions = _extract_all_actions()
+        if actions is None:
+            pytest.skip("LightSpeed Core source not available in this environment")
+        assert isinstance(actions, set)
+        assert len(actions) > 0
+        # Must contain well-known actions
+        assert "query" in actions
+        assert "list_conversations" in actions
+
+    def test_returns_none_for_missing_source(self, tmp_path):
+        """Should return None when source paths don't exist."""
+        result = _extract_all_actions(src_paths=[str(tmp_path / "nonexistent")])
+        assert result is None
+
+    def test_returns_none_for_invalid_syntax(self, tmp_path):
+        """Should return None when source has syntax errors."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "config.py").write_text("this is not valid python {{{{")
+        result = _extract_all_actions(src_paths=[str(tmp_path)])
+        assert result is None
+
+    def test_parses_custom_action_enum(self, tmp_path):
+        """Should correctly parse string values from an Action enum."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "config.py").write_text(
+            'class Action:\n'
+            '    ADMIN = "admin"\n'
+            '    QUERY = "query"\n'
+            '    LIST_OTHER = "list_other_conversations"\n'
+        )
+        result = _extract_all_actions(src_paths=[str(tmp_path)])
+        assert result == {"admin", "query", "list_other_conversations"}
+
+
+class TestInjectAuthorizationRules:
+    """Validate inject_authorization_rules correctly builds access_rules,
+    excluding dangerous cross-user actions (RHCLOUD-48660).
     """
 
-    @pytest.fixture
-    def stack_config(self):
-        config_path = os.path.join(os.path.dirname(__file__), "lightspeed-stack.yaml")
-        with open(config_path) as f:
-            return yaml.safe_load(f)
+    def test_injects_rules_with_wildcard_role(self):
+        """Should inject access_rules with role '*'."""
+        config = {"authorization": {}}
+        inject_authorization_rules(config)
+        rules = config["authorization"]["access_rules"]
+        assert len(rules) == 1
+        assert rules[0]["role"] == "*"
+        assert len(rules[0]["actions"]) > 0
 
-    def test_authorization_section_exists(self, stack_config):
-        assert "authorization" in stack_config, (
-            "lightspeed-stack.yaml must have an 'authorization' section to enable "
-            "user-scoped conversation access"
+    def test_excludes_dangerous_actions(self):
+        """No dangerous action must appear in the injected rules."""
+        config = {"authorization": {}}
+        inject_authorization_rules(config)
+        granted = set(config["authorization"]["access_rules"][0]["actions"])
+        dangerous = granted & _DANGEROUS_ACTIONS
+        assert not dangerous, (
+            f"Injected rules must not include dangerous actions: {dangerous}"
         )
-        assert "access_rules" in stack_config["authorization"]
-        assert len(stack_config["authorization"]["access_rules"]) > 0
 
-    def test_no_cross_user_conversation_actions(self, stack_config):
-        """Ensure no access rule grants actions that bypass user_id filtering."""
-        for rule in stack_config["authorization"]["access_rules"]:
-            granted = set(rule["actions"])
-            dangerous = granted & _DANGEROUS_ACTIONS
-            assert not dangerous, (
-                f"Role '{rule['role']}' must not have actions {dangerous} — "
-                f"these bypass per-user conversation scoping"
-            )
-
-    def test_required_user_actions_present(self, stack_config):
-        """Ensure the wildcard role has all actions needed for the chatbot."""
-        wildcard_rules = [
-            r for r in stack_config["authorization"]["access_rules"]
-            if r["role"] == "*"
-        ]
-        assert wildcard_rules, (
-            "Must have a rule for role '*' (all authenticated rh-identity users)"
-        )
-        granted = set()
-        for rule in wildcard_rules:
-            granted.update(rule["actions"])
+    def test_includes_required_actions(self):
+        """All actions required for the chatbot must be present."""
+        config = {"authorization": {}}
+        inject_authorization_rules(config)
+        granted = set(config["authorization"]["access_rules"][0]["actions"])
         missing = _REQUIRED_ACTIONS - granted
-        assert not missing, f"Role '*' is missing required actions: {missing}"
+        assert not missing, f"Injected rules are missing required actions: {missing}"
 
-    def test_wildcard_role_used_for_rh_identity(self, stack_config):
-        """rh-identity auth assigns all users the '*' role — verify config uses it."""
-        assert stack_config.get("authentication", {}).get("module") == "rh-identity"
-        roles = {r["role"] for r in stack_config["authorization"]["access_rules"]}
-        assert "*" in roles
+    def test_dynamic_extraction_includes_all_safe_actions(self, tmp_path):
+        """When source is available, all non-dangerous actions are included."""
+        models_dir = tmp_path / "models"
+        models_dir.mkdir()
+        (models_dir / "config.py").write_text(
+            'class Action:\n'
+            '    ADMIN = "admin"\n'
+            '    QUERY = "query"\n'
+            '    LIST_OTHER = "list_other_conversations"\n'
+            '    FEEDBACK = "feedback"\n'
+            '    NEW_FEATURE = "new_feature"\n'
+        )
+        config = {"authorization": {}}
+        inject_authorization_rules(config, src_paths=[str(tmp_path)])
+        granted = set(config["authorization"]["access_rules"][0]["actions"])
+        assert granted == {"query", "feedback", "new_feature"}
+
+    def test_fallback_when_source_unavailable(self, tmp_path):
+        """Should use static fallback when source is not found."""
+        config = {"authorization": {}}
+        inject_authorization_rules(config, src_paths=[str(tmp_path / "nope")])
+        granted = config["authorization"]["access_rules"][0]["actions"]
+        assert granted == _FALLBACK_SAFE_ACTIONS
+
+    def test_fallback_excludes_dangerous_actions(self):
+        """Static fallback must not contain any dangerous actions."""
+        dangerous_in_fallback = set(_FALLBACK_SAFE_ACTIONS) & _DANGEROUS_ACTIONS
+        assert not dangerous_in_fallback, (
+            f"_FALLBACK_SAFE_ACTIONS must not include: {dangerous_in_fallback}"
+        )
+
+    def test_actions_are_sorted(self):
+        """Injected actions should be alphabetically sorted for readability."""
+        config = {"authorization": {}}
+        inject_authorization_rules(config)
+        actions = config["authorization"]["access_rules"][0]["actions"]
+        assert actions == sorted(actions)
+
+    def test_overwrites_existing_authorization(self):
+        """Should replace any pre-existing authorization config."""
+        config = {"authorization": {"access_rules": [{"role": "old", "actions": ["admin"]}]}}
+        inject_authorization_rules(config)
+        rules = config["authorization"]["access_rules"]
+        assert len(rules) == 1
+        assert rules[0]["role"] == "*"
+        assert "admin" not in rules[0]["actions"]

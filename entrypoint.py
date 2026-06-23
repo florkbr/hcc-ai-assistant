@@ -4,6 +4,7 @@ reverse proxy that strips the /api/ai-assistant path prefix.
 
 Also manages embedding service and MCP discovery service subprocesses."""
 
+import ast
 import json
 import os
 import signal
@@ -154,6 +155,93 @@ def merge_mcp_servers(run_config, stack_config, clowder):
         print(f"[entrypoint] Resolved {name} -> {resolved_url}")
 
 
+# Actions that bypass per-user conversation scoping — must NEVER be granted
+# to regular users (RHCLOUD-48660).
+_DANGEROUS_ACTIONS = frozenset({
+    "admin",
+    "list_other_conversations",
+    "read_other_conversations",
+    "query_other_conversations",
+    "delete_other_conversations",
+})
+
+# Static fallback used when LightSpeed Core source is not available for
+# dynamic extraction (e.g. running tests outside the container).
+# Keep in sync with LightSpeed Core's Action enum minus _DANGEROUS_ACTIONS.
+_FALLBACK_SAFE_ACTIONS = sorted([
+    "query", "responses", "streaming_query",
+    "get_conversation", "list_conversations", "delete_conversation",
+    "update_conversation", "feedback", "get_models", "get_tools",
+    "get_shields", "info", "list_mcp_servers", "list_providers",
+    "get_provider", "list_rags", "get_rag", "read_vector_stores",
+    "manage_files", "read_prompts",
+])
+
+# Directories where LightSpeed Core source may reside.
+_LIGHTSPEED_SRC_PATHS = [
+    "/app-root/src",            # Production container (base image)
+    "/tmp/lightspeed-stack/src",  # Local development / CI
+]
+
+
+def _extract_all_actions(src_paths=None):
+    """Extract Action enum string values from LightSpeed Core source via AST.
+
+    Parses the source file directly to avoid import side effects from
+    LightSpeed Core's module graph.  Returns a set of action strings,
+    or None if the source cannot be found.
+    """
+    for src_dir in (src_paths or _LIGHTSPEED_SRC_PATHS):
+        config_path = os.path.join(src_dir, "models", "config.py")
+        try:
+            with open(config_path) as f:
+                tree = ast.parse(f.read())
+        except (FileNotFoundError, SyntaxError):
+            continue
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == "Action":
+                actions = set()
+                for item in node.body:
+                    if isinstance(item, ast.Assign):
+                        for target in item.targets:
+                            if (
+                                isinstance(target, ast.Name)
+                                and isinstance(item.value, ast.Constant)
+                                and isinstance(item.value.value, str)
+                            ):
+                                actions.add(item.value.value)
+                if actions:
+                    return actions
+    return None
+
+
+def inject_authorization_rules(stack_config, src_paths=None):
+    """Inject authorization access_rules, excluding dangerous cross-user actions.
+
+    Dynamically reads LightSpeed Core's Action enum (via AST parsing) so the
+    access_rules stay in sync with upstream automatically — no manual list
+    maintenance when new actions are added.  Falls back to a static list for
+    dev/test environments where the source is unavailable.
+    """
+    all_actions = _extract_all_actions(src_paths)
+    if all_actions is not None:
+        safe_actions = sorted(all_actions - _DANGEROUS_ACTIONS)
+        print(
+            f"[entrypoint] Built access_rules dynamically "
+            f"({len(safe_actions)} safe actions, "
+            f"excluded {len(all_actions & _DANGEROUS_ACTIONS)} dangerous)"
+        )
+    else:
+        safe_actions = list(_FALLBACK_SAFE_ACTIONS)
+        print("[entrypoint] Using static fallback access_rules "
+              "(LightSpeed Core source not found)")
+
+    stack_config["authorization"] = {
+        "access_rules": [{"role": "*", "actions": safe_actions}]
+    }
+
+
 def apply_clowder_config(run_config, stack_config, clowder):
     """Apply Clowder ACG config values to the parsed YAML configs."""
     if clowder is None:
@@ -237,6 +325,7 @@ def render_configs(clowder):
 
     run_config, stack_config = apply_clowder_config(run_config, stack_config, clowder)
     merge_mcp_servers(run_config, stack_config, clowder)
+    inject_authorization_rules(stack_config)
 
     run_out = os.path.join(RUNTIME_DIR, RUN_YAML)
     stack_out = os.path.join(RUNTIME_DIR, STACK_YAML)
