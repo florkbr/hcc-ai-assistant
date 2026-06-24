@@ -33,10 +33,34 @@ authentication:
   rh_identity_config: {}
 
 # Authorization: scope conversations to the authenticated user (RHCLOUD-48660).
-# entrypoint.py injects access_rules at startup from a hard-coded safe list,
-# excluding dangerous cross-user actions (*_other_conversations, admin).
-# See inject_authorization_rules() in entrypoint.py for details.
-authorization: {}
+# Granting explicit safe actions triggers GenericAccessResolver in LightSpeed
+# Core, which applies per-user conversation filtering.  Dangerous actions
+# (*_other_conversations, admin) are simply omitted from the list.
+# Reference: https://github.com/lightspeed-core/lightspeed-stack/blob/main/docs/auth/authorization.md
+authorization:
+  access_rules:
+    - role: "*"
+      actions:
+        - delete_conversation
+        - feedback
+        - get_conversation
+        - get_models
+        - get_provider
+        - get_rag
+        - get_shields
+        - get_tools
+        - info
+        - list_conversations
+        - list_mcp_servers
+        - list_providers
+        - list_rags
+        - manage_files
+        - query
+        - read_prompts
+        - read_vector_stores
+        - responses
+        - streaming_query
+        - update_conversation
 mcp_servers:
   # Dynamic MCP servers are merged from CLOWDER_MCP_SERVER_CONFIGS env var at startup.
   # Only "hard" servers that must always be present belong here.

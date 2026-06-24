@@ -154,44 +154,6 @@ def merge_mcp_servers(run_config, stack_config, clowder):
         print(f"[entrypoint] Resolved {name} -> {resolved_url}")
 
 
-# Actions that bypass per-user conversation scoping — must NEVER be granted
-# to regular users (RHCLOUD-48660).
-_DANGEROUS_ACTIONS = frozenset({
-    "admin",
-    "list_other_conversations",
-    "read_other_conversations",
-    "query_other_conversations",
-    "delete_other_conversations",
-})
-
-# Safe actions granted to all authenticated users.  Maintained as a hard-coded
-# list based on the documented authorization configs in lightspeed-stack:
-# https://github.com/lightspeed-core/lightspeed-stack/blob/main/docs/auth/authorization.md
-#
-# Update this list when new actions are added upstream.
-_SAFE_ACTIONS = sorted([
-    "query", "responses", "streaming_query",
-    "get_conversation", "list_conversations", "delete_conversation",
-    "update_conversation", "feedback", "get_models", "get_tools",
-    "get_shields", "info", "list_mcp_servers", "list_providers",
-    "get_provider", "list_rags", "get_rag", "read_vector_stores",
-    "manage_files", "read_prompts",
-])
-
-
-def inject_authorization_rules(stack_config):
-    """Inject authorization access_rules, excluding dangerous cross-user actions.
-
-    Uses a hard-coded list of safe actions based on lightspeed-stack's
-    documented authorization configs, rather than coupling to the
-    lightspeed-core source code or directory structure.
-    """
-    stack_config["authorization"] = {
-        "access_rules": [{"role": "*", "actions": list(_SAFE_ACTIONS)}]
-    }
-    print(f"[entrypoint] Injected access_rules ({len(_SAFE_ACTIONS)} safe actions)")
-
-
 def apply_clowder_config(run_config, stack_config, clowder):
     """Apply Clowder ACG config values to the parsed YAML configs."""
     if clowder is None:
@@ -275,7 +237,6 @@ def render_configs(clowder):
 
     run_config, stack_config = apply_clowder_config(run_config, stack_config, clowder)
     merge_mcp_servers(run_config, stack_config, clowder)
-    inject_authorization_rules(stack_config)
 
     run_out = os.path.join(RUNTIME_DIR, RUN_YAML)
     stack_out = os.path.join(RUNTIME_DIR, STACK_YAML)
