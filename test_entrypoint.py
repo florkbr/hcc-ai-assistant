@@ -4,8 +4,7 @@ import pytest
 
 from entrypoint import (
     _DANGEROUS_ACTIONS,
-    _FALLBACK_SAFE_ACTIONS,
-    _extract_all_actions,
+    _SAFE_ACTIONS,
     inject_authorization_rules,
     load_mcp_server_configs,
     merge_mcp_servers,
@@ -278,47 +277,6 @@ _REQUIRED_ACTIONS = {
 }
 
 
-class TestExtractAllActions:
-    """Validate that _extract_all_actions correctly parses the Action enum."""
-
-    def test_extracts_actions_from_lightspeed_source(self):
-        """Should find actions when LightSpeed Core source is available."""
-        actions = _extract_all_actions()
-        if actions is None:
-            pytest.skip("LightSpeed Core source not available in this environment")
-        assert isinstance(actions, set)
-        assert len(actions) > 0
-        # Must contain well-known actions
-        assert "query" in actions
-        assert "list_conversations" in actions
-
-    def test_returns_none_for_missing_source(self, tmp_path):
-        """Should return None when source paths don't exist."""
-        result = _extract_all_actions(src_paths=[str(tmp_path / "nonexistent")])
-        assert result is None
-
-    def test_returns_none_for_invalid_syntax(self, tmp_path):
-        """Should return None when source has syntax errors."""
-        models_dir = tmp_path / "models"
-        models_dir.mkdir()
-        (models_dir / "config.py").write_text("this is not valid python {{{{")
-        result = _extract_all_actions(src_paths=[str(tmp_path)])
-        assert result is None
-
-    def test_parses_custom_action_enum(self, tmp_path):
-        """Should correctly parse string values from an Action enum."""
-        models_dir = tmp_path / "models"
-        models_dir.mkdir()
-        (models_dir / "config.py").write_text(
-            'class Action:\n'
-            '    ADMIN = "admin"\n'
-            '    QUERY = "query"\n'
-            '    LIST_OTHER = "list_other_conversations"\n'
-        )
-        result = _extract_all_actions(src_paths=[str(tmp_path)])
-        assert result == {"admin", "query", "list_other_conversations"}
-
-
 class TestInjectAuthorizationRules:
     """Validate inject_authorization_rules correctly builds access_rules,
     excluding dangerous cross-user actions (RHCLOUD-48660).
@@ -351,35 +309,11 @@ class TestInjectAuthorizationRules:
         missing = _REQUIRED_ACTIONS - granted
         assert not missing, f"Injected rules are missing required actions: {missing}"
 
-    def test_dynamic_extraction_includes_all_safe_actions(self, tmp_path):
-        """When source is available, all non-dangerous actions are included."""
-        models_dir = tmp_path / "models"
-        models_dir.mkdir()
-        (models_dir / "config.py").write_text(
-            'class Action:\n'
-            '    ADMIN = "admin"\n'
-            '    QUERY = "query"\n'
-            '    LIST_OTHER = "list_other_conversations"\n'
-            '    FEEDBACK = "feedback"\n'
-            '    NEW_FEATURE = "new_feature"\n'
-        )
-        config = {"authorization": {}}
-        inject_authorization_rules(config, src_paths=[str(tmp_path)])
-        granted = set(config["authorization"]["access_rules"][0]["actions"])
-        assert granted == {"query", "feedback", "new_feature"}
-
-    def test_fallback_when_source_unavailable(self, tmp_path):
-        """Should use static fallback when source is not found."""
-        config = {"authorization": {}}
-        inject_authorization_rules(config, src_paths=[str(tmp_path / "nope")])
-        granted = config["authorization"]["access_rules"][0]["actions"]
-        assert granted == _FALLBACK_SAFE_ACTIONS
-
-    def test_fallback_excludes_dangerous_actions(self):
-        """Static fallback must not contain any dangerous actions."""
-        dangerous_in_fallback = set(_FALLBACK_SAFE_ACTIONS) & _DANGEROUS_ACTIONS
-        assert not dangerous_in_fallback, (
-            f"_FALLBACK_SAFE_ACTIONS must not include: {dangerous_in_fallback}"
+    def test_safe_actions_excludes_dangerous(self):
+        """_SAFE_ACTIONS must not contain any dangerous actions."""
+        dangerous_in_safe = set(_SAFE_ACTIONS) & _DANGEROUS_ACTIONS
+        assert not dangerous_in_safe, (
+            f"_SAFE_ACTIONS must not include: {dangerous_in_safe}"
         )
 
     def test_actions_are_sorted(self):

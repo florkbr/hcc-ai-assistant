@@ -33,10 +33,8 @@ authentication:
   rh_identity_config: {}
 
 # Authorization: scope conversations to the authenticated user (RHCLOUD-48660).
-# entrypoint.py dynamically populates access_rules at startup from LightSpeed
-# Core's Action enum, granting all actions EXCEPT the dangerous cross-user ones
-# (*_other_conversations, admin).  This avoids maintaining a static copy that
-# drifts when new actions are added upstream.
+# entrypoint.py injects access_rules at startup from a hard-coded safe list,
+# excluding dangerous cross-user actions (*_other_conversations, admin).
 # See inject_authorization_rules() in entrypoint.py for details.
 authorization: {}
 mcp_servers:
