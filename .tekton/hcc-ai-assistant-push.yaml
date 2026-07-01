@@ -191,29 +191,66 @@ spec:
             #!/bin/bash
             set -e
 
-            SERVICES="embedding-service mcp-discovery-service"
             failed=""
 
-            for svc in $SERVICES; do
-              name=$(basename "$svc")
+            # Auto-discover testable services (directories with pyproject.toml containing pytest)
+            for pyproject in $(find /var/workdir/source -maxdepth 2 -name "pyproject.toml" -type f); do
+              dir=$(dirname "$pyproject")
+              svc_path="${dir#/var/workdir/source/}"
+
+              # Skip root-level pyproject.toml (we'll handle root tests separately)
+              if [ "$svc_path" = "." ]; then
+                continue
+              fi
+
+              # Check if pytest is in dev dependencies
+              if grep -q "pytest" "$pyproject"; then
+                svc_name=$(basename "$svc_path")
+                echo "========================================="
+                echo "Testing $svc_name..."
+                echo "========================================="
+
+                cp -r "/var/workdir/source/$svc_path" "/var/workdir/${svc_name}-test"
+                cd "/var/workdir/${svc_name}-test"
+
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v || failed="$failed $svc_name"
+                else
+                  pip install --quiet ".[dev]"
+                  pytest -v || failed="$failed $svc_name"
+                fi
+
+                cd /var/workdir
+              fi
+            done
+
+            # Run root-level tests if they exist
+            if ls /var/workdir/source/test_*.py 1> /dev/null 2>&1; then
               echo "========================================="
-              echo "Testing $name..."
+              echo "Testing root-level tests..."
               echo "========================================="
 
-              cp -r "/var/workdir/source/$svc" "/var/workdir/${name}-test"
-              cd "/var/workdir/${name}-test"
+              cd /var/workdir/source
 
-              if [ -f "uv.lock" ]; then
-                pip install --quiet uv
-                uv sync --frozen --all-extras
-                uv run pytest -v || failed="$failed $name"
+              # Install root dependencies if needed
+              if [ -f "pyproject.toml" ]; then
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v test_*.py || failed="$failed root-tests"
+                else
+                  pip install --quiet -e ".[dev]"
+                  pytest -v test_*.py || failed="$failed root-tests"
+                fi
               else
-                pip install --quiet ".[dev]"
-                pytest -v || failed="$failed $name"
+                # Fallback: just try to run pytest
+                pytest -v test_*.py || failed="$failed root-tests"
               fi
 
               cd /var/workdir
-            done
+            fi
 
             if [ -n "$failed" ]; then
               echo "FAILED:$failed"
