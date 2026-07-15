@@ -2,12 +2,15 @@
 
 ## Overview
 
-This project has two independently testable Python services, each with their own test suite, dependencies, and pytest configuration.
+This project has two independently testable Python services plus root-level tests for the orchestrator and migrations.
 
-| Service | Test File(s) | Test Count | Key Patterns |
-|---------|-------------|------------|--------------|
-| embedding-service | `test_main.py` | 19 | FastAPI TestClient, async fixtures, DB mocking |
-| mcp-discovery-service | `test_main.py`, `test_mcp_server.py` | 53 | MCP session mocking, httpx mocking, async indexer |
+| Location | Test File(s) | Key Patterns |
+|----------|-------------|--------------|
+| `embedding-service/` | `test_main.py` | FastAPI TestClient, async fixtures, DB mocking |
+| `mcp-discovery-service/` | `test_main.py`, `test_mcp_server.py` | MCP session mocking, httpx mocking, async indexer |
+| Root | `test_entrypoint.py`, `test_migrations.py` | subprocess mocking, Clowder config, DB migrations |
+
+Run `pytest -v` in each directory for current test counts.
 
 ## Running Tests
 
@@ -20,6 +23,10 @@ pytest -v
 # MCP discovery service
 cd mcp-discovery-service
 pip install -e ".[dev]"
+pytest -v
+
+# Root-level tests (entrypoint + migrations)
+pip install pyyaml psycopg2-binary
 pytest -v
 
 # With coverage

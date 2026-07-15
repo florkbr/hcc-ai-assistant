@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-HTTP-based AI assistant service for the Hybrid Cloud Console (HCC). Uses LightSpeed Core with Google Vertex AI (Gemini models) and MCP (Model Context Protocol) for tool discovery. All services are Python-based and run as sidecars in a single Kubernetes pod.
+HTTP-based AI assistant service for the Hybrid Cloud Console (HCC). Uses LightSpeed Core with Google Vertex AI (Gemini models) and MCP (Model Context Protocol) for tool discovery. All services are Python-based and run as subprocesses within a single container, managed by `entrypoint.py`.
 
 ## Repository Structure
 
@@ -10,10 +10,14 @@ HTTP-based AI assistant service for the Hybrid Cloud Console (HCC). Uses LightSp
 hcc-ai-assistant/
 ├── entrypoint.py              # Main orchestrator: renders configs, starts all services
 ├── proxy.py                   # Starlette reverse proxy (strips /api/ai-assistant prefix)
+├── migrations.py              # Idempotent DB migrations (runs on every startup)
 ├── lightspeed-stack.yaml      # LightSpeed Core config (MCP servers, auth, system prompt)
 ├── run.yaml                   # llama-stack run config (providers, storage, models)
+├── local_mcp_server_configs.json  # Local dev MCP server definitions (fallback)
 ├── Dockerfile                 # Multi-service container (base: lightspeed-stack-rhel9)
 ├── docker-compose.yml         # Local dev: postgres + all services
+├── test_entrypoint.py         # Tests for entrypoint orchestration
+├── test_migrations.py         # Tests for DB migrations
 ├── config/
 │   └── clowdapp.yaml          # OpenShift ClowdApp deployment template
 ├── .tekton/
@@ -22,15 +26,16 @@ hcc-ai-assistant/
 ├── embedding-service/
 │   ├── main.py                # FastAPI app: embeddings + pgvector storage
 │   ├── pyproject.toml         # Dependencies and tool config
-│   ├── test_main.py           # 19 tests (health, embeddings, vector CRUD)
+│   ├── test_main.py           # Tests (health, embeddings, vector CRUD)
 │   ├── Dockerfile             # Standalone container (dev only)
 │   └── README.md
 ├── mcp-discovery-service/
 │   ├── main.py                # MCP indexer: config, vector store client, background refresh
 │   ├── mcp_server.py          # FastMCP server: 4 discovery tools + health endpoint
 │   ├── pyproject.toml         # Dependencies and tool config
-│   ├── test_main.py           # 28 tests (config, vector store, indexer, search)
-│   ├── test_mcp_server.py     # 25 tests (MCP tools, health, integration)
+│   ├── test_main.py           # Tests (config, vector store, indexer, search)
+│   ├── test_mcp_server.py     # Tests (MCP tools, health, integration)
+│   ├── Dockerfile             # Standalone container (dev only)
 │   └── README.md
 └── uv.lock                    # Root lockfile
 ```
@@ -39,7 +44,7 @@ hcc-ai-assistant/
 
 ### Sidecar Pod Architecture
 
-All three services run in a single Kubernetes pod, communicating via `localhost`:
+All three services run as subprocesses in a single container, communicating via `localhost`:
 
 | Service | Port | Framework | Purpose |
 |---------|------|-----------|---------|
@@ -66,12 +71,14 @@ Client -> :8000/api/ai-assistant/* -> proxy.py (strips prefix) -> :8080 lightspe
 1. Loads Clowder config (if `CLOWDER_ENABLED`)
 2. Renders `run.yaml` and `lightspeed-stack.yaml` from templates to `/app-root/`
 3. Applies Clowder DB config (switches sqlite -> postgres)
-4. Exports `PG*` env vars for embedding service
-5. Starts embedding-service subprocess (uvicorn)
-6. Starts mcp-discovery-service subprocess
-7. Starts lightspeed-stack subprocess
-8. Runs reverse proxy (uvicorn, blocks until shutdown)
-9. Handles SIGTERM/SIGINT: terminates all children
+4. Merges dynamic MCP servers from `CLOWDER_MCP_SERVER_CONFIGS` env var
+5. Exports `PG*` env vars for embedding service
+6. Runs database migrations (`migrations.py`)
+7. Starts embedding-service subprocess (uvicorn)
+8. Starts mcp-discovery-service subprocess
+9. Starts lightspeed-stack subprocess
+10. Runs reverse proxy (uvicorn, blocks until shutdown)
+11. Handles SIGTERM/SIGINT: terminates all children
 
 ## Technology Stack
 
@@ -103,8 +110,9 @@ Client -> :8000/api/ai-assistant/* -> proxy.py (strips prefix) -> :8080 lightspe
 
 LightSpeed Core configuration:
 - `service`: host/port for the backend (8080 internal)
-- `mcp_servers`: list of MCP servers to connect to (RBAC, Notifications, mcp-discovery)
+- `mcp_servers`: only `mcp-discovery-server` is static; other servers (RBAC, Notifications) are injected dynamically via `CLOWDER_MCP_SERVER_CONFIGS`
 - `authentication`: `rh-identity` module with health probe skip
+- `authorization`: `access_rules` granting per-user conversation scoping
 - `conversation_cache`: sqlite (default) or postgres (via Clowder)
 - `customization.system_prompt`: instructs the LLM to always use `recommend_tools` from mcp-discovery-server
 
@@ -112,7 +120,7 @@ LightSpeed Core configuration:
 
 llama-stack configuration:
 - `providers.inference`: google-vertex (Gemini) + sentence-transformers
-- `providers.tool_runtime`: rag-runtime + MCP providers (RBAC, Notifications, mcp-discovery)
+- `providers.tool_runtime`: rag-runtime + `mcp-discovery-provider` (static); other MCP providers merged dynamically at startup
 - `storage.backends`: kv_sqlite/sql_sqlite (default), switched to postgres by Clowder
 - `registered_resources`: models, shields, vector_stores, tool_groups
 
@@ -166,6 +174,8 @@ Search uses semantic (vector) search first, falls back to keyword search.
 | `VERTEX_LOCATION` | - | Google Cloud region |
 | `ALLOWED_MODEL` | - | Gemini model name |
 | `GOOGLE_API_KEY` | - | Google API key |
+| `GOOGLE_APPLICATION_CREDENTIALS` | - | Path to Google service account JSON |
+| `CLOWDER_MCP_SERVER_CONFIGS` | - | JSON string of dynamic MCP server definitions |
 
 ### Database (set by Clowder or manually)
 
@@ -187,34 +197,16 @@ Search uses semantic (vector) search first, falls back to keyword search.
 | `MCP_CONFIG_PATH` | `/app-root/lightspeed-stack.yaml` | MCP servers config path |
 | `ENABLE_VECTOR_STORE` | `false` | Enable semantic search |
 | `EMBEDDING_SERVICE_URL` | `http://localhost:8002` | Embedding service URL |
+| `EMBEDDING_SERVICE_TIMEOUT` | `120` | Timeout in seconds for embedding service requests |
+| `CAPABILITIES_CACHE_PATH` | `/app-root/data/mcp-capabilities.json` | Disk cache for discovered capabilities |
+| `VECTOR_STORE_ID` | `mcp-capabilities-store` | Vector store ID in the embedding service |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-mpnet-base-v2` | Embedding model name |
 | `REFRESH_INTERVAL_MINUTES` | `5` | Background refresh interval |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## Development Commands
 
-```bash
-# Local development (each service independently)
-cd embedding-service && pip install -e ".[dev]" && uvicorn main:app --reload --port 8002
-cd mcp-discovery-service && pip install -e ".[dev]" && python main.py
-
-# Docker Compose (all services)
-docker compose up -d --build
-docker compose logs -f
-docker compose down
-
-# Run tests
-cd embedding-service && pytest -v                    # 19 tests
-cd mcp-discovery-service && pytest -v                # 53 tests
-
-# Run tests with coverage
-cd embedding-service && pytest --cov=main --cov-report=html
-cd mcp-discovery-service && pytest --cov=main --cov=mcp_server --cov-report=html
-
-# Code formatting
-black .
-ruff check .
-ruff check --fix .
-```
+See [CLAUDE.md](./CLAUDE.md) for quick-reference commands (tests, formatting, linting, docker compose, health checks).
 
 ## Coding Conventions
 
@@ -235,7 +227,7 @@ ruff check --fix .
 2. **Clowder config changes DB backend**: In OpenShift, sqlite is replaced with postgres automatically. Test both paths
 3. **MCP server unreachability**: LightSpeed Core will 500 on queries if any registered MCP provider is unreachable. Only enable providers reachable from the current environment
 4. **Vector dimension mismatch**: Embedding model outputs 768-dim vectors. pgvector schema is hardcoded to `vector(768)`. Changing models requires schema migration
-5. **Network namespace in docker-compose**: Services share `lightspeed-stack`'s network via `network_mode`. Use `localhost` not service names
+5. **Subprocess architecture in docker-compose**: All services run as subprocesses inside the `lightspeed-stack` container. Use `localhost` not service names
 6. **DNS rebinding protection**: Disabled in MCP server for Kubernetes compatibility (service hostnames, FQDN variations)
 7. **Secrets**: Never commit `.env`, `service-account-key.json`, or Google credentials. Use Clowder secrets in production
 

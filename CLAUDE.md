@@ -3,11 +3,10 @@
 ## Commands
 
 ```bash
-# Run tests (embedding service - 19 tests)
+# Run tests
 cd embedding-service && pip install -e ".[dev]" && pytest -v
-
-# Run tests (MCP discovery service - 53 tests)
 cd mcp-discovery-service && pip install -e ".[dev]" && pytest -v
+pytest -v  # Root-level tests (entrypoint + migrations)
 
 # Run tests with coverage
 cd embedding-service && pytest --cov=main --cov-report=html
@@ -24,16 +23,17 @@ ruff check --fix .
 docker compose up -d --build
 
 # Health checks
-curl http://localhost:8000/health  # Proxy + LightSpeed
-curl http://localhost:8001/health  # MCP Discovery
-curl http://localhost:8002/health  # Embedding Service
+curl http://localhost:8000/liveness   # Proxy liveness
+curl http://localhost:8000/readiness  # Proxy readiness (checks backend)
+curl http://localhost:8001/health     # MCP Discovery
+curl http://localhost:8002/health     # Embedding Service
 ```
 
 ## Git Conventions
 
-- Branch format: `bot/<TICKET-KEY>` or `feature/<description>`
+- Branch format: `bot/<TICKET-KEY>`, `feature/<description>`, or `<username>/<description>`
 - Commit format: `type(scope): description` (conventional commits)
-- Scopes: `proxy`, `embedding`, `mcp-discovery`, `config`, `docker`, `ci`
+- Scopes: `proxy`, `embedding`, `embedding-service`, `mcp-discovery`, `config`, `docker`, `ci`, `pipelines`, `tekton`
 - Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`
 
 ## Key Files
@@ -43,6 +43,7 @@ curl http://localhost:8002/health  # Embedding Service
 - `lightspeed-stack.yaml` - LightSpeed Core config (MCP servers, auth, prompts)
 - `run.yaml` - llama-stack config (providers, storage, models)
 - `config/clowdapp.yaml` - OpenShift deployment template
+- `migrations.py` - Database migrations (runs on startup)
 - `embedding-service/main.py` - Embedding + vector storage API
 - `mcp-discovery-service/main.py` - MCP tool indexer
 - `mcp-discovery-service/mcp_server.py` - MCP protocol server (4 tools)

@@ -54,20 +54,9 @@ docker run -p 8001:8001 \
   mcp-discovery-service:latest
 ```
 
-### Docker Compose (Sidecar Architecture)
+### Docker Compose
 
-```bash
-# Start all services (runs as sidecars in shared network namespace)
-docker-compose up -d --build
-
-# Check logs
-docker-compose logs -f mcp-discovery-service
-
-# Test health endpoint (via lightspeed-stack's exposed ports)
-curl http://localhost:8001/health
-```
-
-**Note**: In docker-compose, all services share lightspeed-stack's network namespace using `network_mode`. Services communicate via `localhost` instead of service names.
+See [Deployment Guidelines](../docs/deployment-guidelines.md) for Docker Compose setup.
 
 ## MCP Protocol
 
@@ -131,9 +120,10 @@ Environment variables:
 | `CAPABILITIES_CACHE_PATH` | `/app-root/data/mcp-capabilities.json` | JSON cache file for capabilities |
 | `REFRESH_INTERVAL_MINUTES` | 5 | Auto-refresh interval |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `ENABLE_VECTOR_STORE` | `false` | Enable semantic search via ChromaDB |
+| `ENABLE_VECTOR_STORE` | `false` | Enable semantic search via the embedding service |
 | `EMBEDDING_SERVICE_URL` | `http://localhost:8002` | Embedding service URL (localhost in K8s/sidecar) |
-| `VECTOR_STORE_ID` | `mcp-capabilities-store` | ChromaDB vector store ID |
+| `EMBEDDING_SERVICE_TIMEOUT` | `120` | Timeout in seconds for embedding service requests |
+| `VECTOR_STORE_ID` | `mcp-capabilities-store` | Vector store ID for the embedding service |
 | `EMBEDDING_MODEL` | `sentence-transformers/all-mpnet-base-v2` | Embedding model |
 
 **Note on HOST values:**
@@ -155,43 +145,7 @@ In Kubernetes/OpenShift, this is managed via ConfigMap (mounted as lightspeed-st
 
 ## Architecture
 
-### Kubernetes/OpenShift (Sidecar Deployment)
-
-In production, all services run in a single pod as sidecars, communicating via `localhost`:
-
-```
-┌────────────────────────────────────────────────┐
-│ Pod: hcc-ai-assistant                          │
-│                                                │
-│  ┌──────────────────────┐                     │
-│  │ Container: api       │  port 8000          │
-│  │ (lightspeed-stack)   │◄────────────────────┤─ Public
-│  └───────┬──────────────┘                     │
-│          │ localhost:8001/mcp                 │
-│          ▼                                     │
-│  ┌──────────────────────┐                     │
-│  │ Sidecar: mcp-disc    │  port 8001          │
-│  │ (Python/FastMCP)     │                     │
-│  │ - MCP Server         │                     │
-│  │ - 4 MCP Tools        │                     │
-│  └───────┬──────────────┘                     │
-│          │ localhost:8002                     │
-│          ▼                                     │
-│  ┌──────────────────────┐                     │
-│  │ Sidecar: embedding-service │  port 8002          │
-│  │ (Python)             │                     │
-│  │ - Embeddings         │                     │
-│  │ - Vector Store       │                     │
-│  └──────────────────────┘                     │
-└────────────────────────────────────────────────┘
-```
-
-**Startup Order** (enforced by startup probes):
-1. embedding-service → 2. mcp-discovery-service → 3. api (lightspeed-stack)
-
-### Docker Compose (Simulated Sidecar)
-
-Uses `network_mode: "service:lightspeed-stack"` to simulate Kubernetes pod behavior.
+See [Architecture Guidelines](../docs/architecture-guidelines.md) for the system architecture and sidecar pattern.
 
 ## Search Modes
 
@@ -211,7 +165,7 @@ Uses `network_mode: "service:lightspeed-stack"` to simulate Kubernetes pod behav
 
 ### Running Tests
 
-The service includes comprehensive test coverage (53 tests) using pytest with modern best practices.
+The service includes comprehensive test coverage using pytest with modern best practices.
 
 ```bash
 # Install with dev dependencies
@@ -252,43 +206,11 @@ pytest -k "vector"  # All vector-related tests
 - ✅ All 4 MCP tools (search, list, get_schema, recommend)
 - ✅ Health checks and integration tests
 
-### Test Structure
-
-Tests use modern pytest patterns:
-- **Fixtures**: Centralized test data and mocks (equivalent to `beforeEach`)
-- **Parametrized tests**: Multiple scenarios tested efficiently
-- **Async support**: Full async/await testing with pytest-asyncio
-- **Mocking**: External dependencies (MCP sessions, HTTP clients) mocked for fast tests
-- **Temporary files**: Uses `tmp_path` for file operations
-
-### Continuous Integration
-
-Example GitHub Actions:
-
-```yaml
-- name: Run Tests
-  run: |
-    pip install -e ".[dev]"
-    pytest --cov=main --cov=mcp_server --cov-report=xml
-
-- name: Upload Coverage
-  uses: codecov/codecov-action@v3
-```
+See [Testing Guidelines](../docs/testing-guidelines.md) for test patterns and conventions.
 
 ## Development
 
-### Code Style
-
-```bash
-# Install dev dependencies
-pip install ".[dev]"
-
-# Format code
-black main.py mcp_server.py
-
-# Lint
-ruff check main.py mcp_server.py
-```
+See [CLAUDE.md](../CLAUDE.md) for code style commands and conventions.
 
 ## Dependencies
 
@@ -301,15 +223,7 @@ ruff check main.py mcp_server.py
 
 ## Deployment
 
-### Kubernetes/OpenShift
-
-See `config/clowdapp.yaml` for deployment configuration.
-
-### Resource Requirements
-
-- **CPU**: 0.25-0.5 cores
-- **Memory**: 256-512 MB
-- **Storage**: Minimal (capabilities cache)
+See [Deployment Guidelines](../docs/deployment-guidelines.md) for Kubernetes/OpenShift deployment and resource requirements.
 
 ## Troubleshooting
 
@@ -327,7 +241,7 @@ echo $ENABLE_VECTOR_STORE  # Should be "true"
 echo $EMBEDDING_SERVICE_URL  # Should be "http://localhost:8002"
 
 # Check logs
-docker-compose logs mcp-discovery-service | grep -i vector
+docker compose logs lightspeed-stack | grep -i vector
 ```
 
 ### No Capabilities Found
@@ -343,7 +257,7 @@ cat /app-root/lightspeed-stack.yaml
 curl http://example-mcp-server:3001/mcp
 
 # Check discovery logs
-docker-compose logs mcp-discovery-service | grep -i discover
+docker compose logs lightspeed-stack | grep -i discover
 ```
 
 ### MCP Protocol Connection Issues

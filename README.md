@@ -7,24 +7,22 @@ HTTP-based AI assistant service using LightSpeed stack with Google Vertex AI and
 This project provides a production-ready AI assistant with:
 - **Google Vertex AI** integration via LightSpeed Core
 - **MCP Tool Discovery** - automatically discovers and indexes available MCP tools
-- **Vector Embeddings** - semantic search powered by sentence-transformers + ChromaDB
-- **Sidecar Architecture** - all services run in a single pod, communicating via localhost
+- **Vector Embeddings** - semantic search powered by sentence-transformers + pgvector
+- **Subprocess Architecture** - all services run in a single container, communicating via localhost
 
 All services are built with **Python** for a unified development experience.
 
 ## Architecture
 
-### Kubernetes/OpenShift (Sidecar Deployment)
-
-In production, all services run in a single pod as sidecars, communicating via `localhost`:
+All three services run as subprocesses within a single container, managed by `entrypoint.py`:
 
 ```
 ┌────────────────────────────────────────────────┐
-│ Pod: hcc-ai-assistant                          │
+│ Container: api                                 │
 │                                                │
 │  ┌──────────────────────┐                     │
-│  │ Container: api       │  port 8000          │
-│  │ (lightspeed-stack)   │◄────────────────────┤─ Public
+│  │ Reverse Proxy        │  port 8000          │
+│  │ + LightSpeed Stack   │◄────────────────────┤─ Public
 │  │ - Google Vertex AI   │                     │
 │  │ - RAG capabilities   │                     │
 │  │ - Conversation cache │                     │
@@ -32,7 +30,7 @@ In production, all services run in a single pod as sidecars, communicating via `
 │          │ localhost:8001/mcp                 │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: mcp-disc    │  port 8001          │
+│  │ MCP Discovery        │  port 8001          │
 │  │ (Python/FastMCP)     │                     │
 │  │ - MCP Server         │                     │
 │  │ - 4 MCP Tools        │                     │
@@ -41,16 +39,18 @@ In production, all services run in a single pod as sidecars, communicating via `
 │          │ localhost:8002                     │
 │          ▼                                     │
 │  ┌──────────────────────┐                     │
-│  │ Sidecar: embedding   │  port 8002          │
-│  │ (Python)             │                     │
+│  │ Embedding Service    │  port 8002          │
+│  │ (Python/FastAPI)     │                     │
 │  │ - Embeddings         │                     │
 │  │ - Vector Store       │                     │
-│  │ - ChromaDB           │                     │
+│  │ - pgvector           │                     │
 │  └──────────────────────┘                     │
 └────────────────────────────────────────────────┘
 ```
 
-**Startup Order**: embedding-service → mcp-discovery-service → lightspeed-stack
+**Startup Order**: embedding-service -> mcp-discovery-service -> lightspeed-stack
+
+For architecture decisions and patterns, see [Architecture Guidelines](./docs/architecture-guidelines.md).
 
 ## Quick Start
 
@@ -70,9 +70,10 @@ cp .env.example .env
 docker compose up -d --build
 
 # Check health of all services
-curl http://localhost:8000/health  # LightSpeed Core
-curl http://localhost:8001/health  # MCP Discovery
-curl http://localhost:8002/health  # Embedding Service
+curl http://localhost:8000/liveness   # Proxy liveness
+curl http://localhost:8000/readiness  # Proxy readiness (checks backend)
+curl http://localhost:8001/health     # MCP Discovery
+curl http://localhost:8002/health     # Embedding Service
 ```
 
 Services will be available at:
@@ -80,14 +81,25 @@ Services will be available at:
 - **MCP Discovery**: http://localhost:8001
 - **Embedding Service**: http://localhost:8002
 
-**Note**: Docker Compose simulates the Kubernetes sidecar architecture using `network_mode: "service:lightspeed-stack"`. All services share the same network namespace and communicate via `localhost`.
+### Test the AI Assistant
+
+```bash
+curl -X POST http://localhost:8000/v1/query \
+  -H "Content-Type: application/json" \
+  -H "x-rh-identity: test" \
+  -d '{
+    "query": "What MCP tools are available?",
+    "provider": "google-vertex",
+    "model": "google-vertex/google/gemini-2.5-flash"
+  }'
+```
+
+The LLM will automatically discover and use MCP tools to answer questions.
 
 ## Services
 
 ### 1. LightSpeed Stack (Port 8000)
 Main AI assistant service powered by Google Vertex AI.
-
-**Key Features:**
 - Google Vertex AI integration (Gemini models)
 - RAG (Retrieval Augmented Generation)
 - Conversation caching
@@ -95,25 +107,20 @@ Main AI assistant service powered by Google Vertex AI.
 
 ### 2. MCP Discovery Service (Port 8001)
 Discovers and indexes MCP tools from configured servers, exposing them via the MCP protocol.
-
-**Key Features:**
 - Full MCP protocol server (FastMCP SDK)
 - 4 MCP tools: search, list, get_schema, recommend
 - Vector-based semantic search + keyword fallback
 - Background refresh every 5 minutes
 
-📖 **[Full Documentation](./mcp-discovery-service/README.md)**
+[Full Documentation](./mcp-discovery-service/README.md)
 
 ### 3. Embedding Service (Port 8002)
 Unified service for text embeddings and vector storage.
-
-**Key Features:**
 - Text embeddings via sentence-transformers
-- Vector storage via ChromaDB
+- Vector storage via pgvector (PostgreSQL)
 - llama-stack compatible API
-- Fast: ~10-50ms embeddings, ~5-20ms queries
 
-📖 **[Full Documentation](./embedding-service/README.md)**
+[Full Documentation](./embedding-service/README.md)
 
 ## Configuration
 
@@ -132,9 +139,7 @@ GOOGLE_API_KEY=your-api-key
 ENABLE_VECTOR_STORE=true
 ```
 
-For detailed configuration options, see individual service READMEs:
-- [MCP Discovery Configuration](./mcp-discovery-service/README.md#configuration)
-- [Embedding Service Configuration](./embedding-service/README.md#configuration)
+For the full list of environment variables, see [AGENTS.md](./AGENTS.md#environment-variables).
 
 ### MCP Server Configuration
 
@@ -147,7 +152,7 @@ mcp_servers:
     url: "http://my-mcp-server:3001/mcp"
 ```
 
-In Kubernetes/OpenShift, this is managed via ConfigMap (mounted as lightspeed-stack.yaml).
+Only `mcp-discovery-server` is statically configured. Other servers (RBAC, Notifications, etc.) are injected dynamically via the `CLOWDER_MCP_SERVER_CONFIGS` env var at startup.
 
 ### Adding MCP Servers Locally
 
@@ -176,186 +181,15 @@ Optional fields:
 
 The entrypoint loads this file as a fallback when the `CLOWDER_MCP_SERVER_CONFIGS` environment variable is not set. In deployed environments, the env var is populated from a ConfigMap via app-interface.
 
-## Testing
-
-### Quick Health Checks
-
-```bash
-# Check all services
-curl http://localhost:8000/health  # LightSpeed Core
-curl http://localhost:8001/health  # MCP Discovery
-curl http://localhost:8002/health  # Embedding Service
-```
-
-### Test the AI Assistant
-
-```bash
-curl -X POST http://localhost:8000/v1/query \
-  -H "Content-Type: application/json" \
-  -H "x-rh-identity: test" \
-  -d '{
-    "query": "What MCP tools are available?",
-    "provider": "google-vertex",
-    "model": "google-vertex/google/gemini-2.5-flash"
-  }'
-```
-
-The LLM will automatically discover and use MCP tools to answer questions.
-
-### Running Unit Tests
-
-Both Python services include comprehensive test suites:
-
-```bash
-# Embedding Service (19 tests)
-cd embedding-service
-pip install -e ".[dev]"
-pytest -v
-
-# MCP Discovery Service (53 tests)
-cd mcp-discovery-service
-pip install -e ".[dev]"
-pytest -v
-```
-
-See individual service READMEs for detailed testing documentation.
-
 ## Development
 
-### Local Development Setup
+For local development setup and deployment instructions, see [Deployment Guidelines](./docs/deployment-guidelines.md).
 
-Each service can be run independently for development:
+For testing instructions, see [Testing Guidelines](./docs/testing-guidelines.md).
 
-```bash
-# Embedding Service
-cd embedding-service
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn main:app --reload --port 8002
-
-# MCP Discovery Service
-cd mcp-discovery-service
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-python main.py
-```
-
-See individual service READMEs for detailed development instructions:
-- [Embedding Service Development](./embedding-service/README.md#development)
-- [MCP Discovery Service Development](./mcp-discovery-service/README.md#development)
-
-## Deployment
-
-### Docker Compose (Local)
-
-```bash
-docker-compose up -d --build    # Start all services
-docker-compose logs -f          # View logs
-docker-compose down             # Stop services
-```
-
-### OpenShift/Kubernetes
-
-See [config/clowdapp.yaml](./config/clowdapp.yaml) for deployment configuration.
-
-All three services run as containers in a single pod:
-- **lightspeed-stack** (main container) - Port 8000 exposed publicly
-- **mcp-discovery-service** (sidecar) - Port 8001 internal
-- **embedding-service** (sidecar) - Port 8002 internal
-
-```bash
-# Deploy to OpenShift
-oc process -f config/clowdapp.yaml \
-  -p ENV_NAME=your-env \
-  -p IMAGE_TAG=latest \
-  | oc apply -f -
-
-# Check status
-oc get pods
-oc logs -f <pod-name> -c mcp-discovery-service
-oc logs -f <pod-name> -c embedding-service
-```
-
-## Troubleshooting
-
-### Services Won't Start
-
-**Check logs for each service:**
-```bash
-docker-compose logs lightspeed-stack
-docker-compose logs mcp-discovery-service
-docker-compose logs embedding-service
-```
-
-### Vector Embeddings Not Working
-
-**Symptoms:** MCP discovery logs show "falling back to keyword search"
-
-**Quick checks:**
-```bash
-# Verify embedding service is healthy
-curl http://localhost:8002/health
-
-# Check if MCP discovery can reach it (via localhost in sidecar)
-docker-compose exec mcp-discovery-service curl http://localhost:8002/health
-
-# Verify environment variable
-docker-compose exec mcp-discovery-service env | grep ENABLE_VECTOR_STORE
-```
-
-**See detailed troubleshooting:**
-- [MCP Discovery Troubleshooting](./mcp-discovery-service/README.md#troubleshooting)
-- [Embedding Service Troubleshooting](./embedding-service/README.md#troubleshooting)
-
-### Out of Memory
-
-Increase memory limits in docker-compose.yml or your Kubernetes deployment.
-
-**Minimum requirements:**
-- Embedding Service: 1GB RAM
-- MCP Discovery: 256MB RAM
-
-See [MCP Discovery Resources](./mcp-discovery-service/README.md#resource-requirements) and [Embedding Service Resources](./embedding-service/README.md#resource-requirements) for details.
-
-## Why Python?
-
-All services use Python for:
-- ✅ **Unified language stack** - one language, one set of tools
-- ✅ **Simplified CI/CD** - single build pipeline
-- ✅ **Easier maintenance** - consistent patterns across services
-- ✅ **Team efficiency** - single skill set required
-- ✅ **ML/AI ecosystem** - natural fit for embedding and AI work
-
-## Why Sidecar Architecture?
-
-Services run as sidecars in a single pod for:
-- ✅ **Low latency** - `localhost` communication is faster than network calls
-- ✅ **Simplified networking** - no service discovery needed
-- ✅ **Resource efficiency** - shared network namespace
-- ✅ **Atomic deployments** - all services deploy together
-- ✅ **Guaranteed startup order** - enforced by probes
+For code style and commands, see [CLAUDE.md](./CLAUDE.md).
 
 ## Contributing
-
-### Code Style
-
-Both Python services use:
-- **Black** for formatting
-- **Ruff** for linting
-- **pytest** for testing
-
-```bash
-# Format code
-black .
-
-# Lint
-ruff check .
-
-# Run tests
-pytest -v
-```
 
 ### Pull Requests
 
