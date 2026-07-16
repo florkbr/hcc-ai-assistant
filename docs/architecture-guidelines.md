@@ -2,12 +2,12 @@
 
 ## Sidecar Pod Pattern
 
-All three services run as containers in a single Kubernetes pod. This is a deliberate architectural choice:
+All three services run as subprocesses within a single container in a Kubernetes pod, managed by `entrypoint.py`. This is a deliberate architectural choice:
 
 - **Localhost communication**: Services talk via `localhost` (no service discovery, no network overhead)
 - **Atomic deployment**: All services deploy and scale together
-- **Shared lifecycle**: If one container fails, the pod restarts
-- **Startup ordering**: Health probes enforce the dependency chain
+- **Shared lifecycle**: If the container fails, the pod restarts
+- **Startup ordering**: Health checks in `entrypoint.py` enforce the dependency chain
 
 ```text
 embedding-service (port 8002)
@@ -26,17 +26,18 @@ reverse proxy (port 8000, public)
 
 1. Add to `entrypoint.py`: subprocess start, health wait, signal handling
 2. Add to `Dockerfile`: COPY source files, install dependencies
-3. Add to `docker-compose.yml`: uses `network_mode: "service:lightspeed-stack"`
-4. Add to `config/clowdapp.yaml`: as a sidecar container in the pod spec
+3. No docker-compose changes needed (subprocesses share the `lightspeed-stack` container)
+4. No clowdapp.yaml sidecar changes needed (single container deployment)
 
 ## Entrypoint Orchestration
 
 `entrypoint.py` is the single process that manages all others:
 
-1. **Config rendering**: Reads template YAMLs, applies Clowder config, writes to `/app-root/`
-2. **Subprocess management**: Starts each service as a subprocess with health checks
-3. **Signal forwarding**: SIGTERM/SIGINT propagated to all children
-4. **Proxy hosting**: Runs the reverse proxy in the main process (blocks until shutdown)
+1. **Config rendering**: Reads template YAMLs, applies Clowder config, merges dynamic MCP servers, writes to `/app-root/`
+2. **Database migrations**: Runs idempotent migrations on every startup (`migrations.py`)
+3. **Subprocess management**: Starts each service as a subprocess with health checks
+4. **Signal forwarding**: SIGTERM/SIGINT propagated to all children
+5. **Proxy hosting**: Runs the reverse proxy in the main process (blocks until shutdown)
 
 ### Important: entrypoint.py is NOT a service
 
@@ -66,10 +67,7 @@ The system uses MCP (Model Context Protocol) at two levels:
 
 ### Level 1: Direct MCP Providers (run.yaml)
 
-LightSpeed/llama-stack connects directly to MCP servers as tool providers:
-- RBAC MCP server (cluster-internal)
-- Notifications MCP server (cluster-internal)
-- MCP Discovery server (localhost sidecar)
+LightSpeed/llama-stack connects directly to MCP servers as tool providers. Only `mcp-discovery-provider` is statically configured in `run.yaml`; other providers (RBAC, Notifications, etc.) are injected dynamically via the `CLOWDER_MCP_SERVER_CONFIGS` env var at startup.
 
 **Warning**: llama-stack tries ALL registered providers on each query. Unreachable providers cause 500 errors. Only enable providers reachable from the current environment.
 

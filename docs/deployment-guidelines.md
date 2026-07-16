@@ -13,7 +13,8 @@ cp .env.example .env
 docker compose up -d --build
 
 # Verify health
-curl http://localhost:8000/health  # Proxy + LightSpeed
+curl http://localhost:8000/liveness   # Proxy liveness
+curl http://localhost:8000/readiness  # Proxy readiness (checks backend)
 curl http://localhost:8001/health  # MCP Discovery
 curl http://localhost:8002/health  # Embedding Service
 
@@ -25,10 +26,10 @@ docker compose logs -f lightspeed-stack  # Single service
 docker compose down
 ```
 
-Docker Compose simulates the Kubernetes sidecar architecture:
+Docker Compose simulates the production architecture:
 - PostgreSQL (pgvector) runs as a separate service
-- All application services share `lightspeed-stack`'s network namespace
-- Services communicate via `localhost` (same as production)
+- All application services run as subprocesses inside the `lightspeed-stack` container (same as production)
+- Services communicate via `localhost`
 
 ### Individual Service Development
 
@@ -86,10 +87,11 @@ When `CLOWDER_ENABLED=true`:
 
 | Probe | Path | Port | Initial Delay | Period |
 |-------|------|------|--------------|--------|
-| Liveness | `/liveness` | 8000 | 30s | 10s |
-| Readiness | `/readiness` | 8000 | 30s | 10s |
+| Startup | `/readiness` | 8000 | 10s | 10s |
+| Liveness | `/liveness` | 8000 | 5s | 10s |
+| Readiness | `/readiness` | 8000 | 5s | 10s |
 
-Both probes hit the reverse proxy, which forwards to the LightSpeed backend.
+Both liveness and readiness probes hit the reverse proxy. `/readiness` forwards to the LightSpeed backend; `/liveness` responds directly from the proxy.
 
 ## Container Image
 
@@ -146,15 +148,11 @@ docker build -t hcc-ai-assistant:dev .
 ### Services Won't Start
 
 ```bash
-# Check each service's logs
+# All service logs are in the single lightspeed-stack container
 docker compose logs lightspeed-stack
-docker compose logs mcp-discovery-service
-docker compose logs embedding-service
 
-# In OpenShift
-oc logs -f <pod> -c api                    # Main container
-oc logs -f <pod> -c mcp-discovery-service  # Sidecar
-oc logs -f <pod> -c embedding-service      # Sidecar
+# In OpenShift (single container, all services log together)
+oc logs -f <pod> -c api
 ```
 
 ### Vector Search Falling Back to Keywords

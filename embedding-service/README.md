@@ -6,21 +6,22 @@ Unified embedding generation and vector storage service compatible with llama-st
 
 This service combines two functionalities in one:
 1. **Embedding Generation**: Convert text to vector embeddings using sentence-transformers
-2. **Vector Storage**: Store and query embeddings using ChromaDB
+2. **Vector Storage**: Store and query embeddings using pgvector (PostgreSQL)
 
 ## Features
 
 - **Unified Service**: Single container for embeddings + vector storage
 - **Compatible APIs**: Implements llama-stack's `/v1/embeddings` and `/v1/vector_io/*` APIs
 - **Production Ready**: Health checks, error handling, structured logging
-- **Persistent Storage**: ChromaDB with disk persistence
+- **Persistent Storage**: pgvector on PostgreSQL
 - **Lightweight**: ~1.5GB memory footprint
 
 ## Technology Stack
 
 - **FastAPI**: High-performance async web framework
 - **sentence-transformers**: Text embedding generation
-- **ChromaDB**: Vector database with similarity search
+- **pgvector**: Vector storage extension for PostgreSQL
+- **psycopg2**: PostgreSQL database driver
 - **Model**: sentence-transformers/all-mpnet-base-v2 (768-dimensional embeddings)
 
 ## API Endpoints
@@ -116,9 +117,8 @@ Service health check.
 {
   "status": "healthy",
   "embedding_model_loaded": true,
-  "chroma_initialized": true,
-  "model": "sentence-transformers/all-mpnet-base-v2",
-  "collections": ["store1", "store2"]
+  "pgvector_connected": true,
+  "model": "sentence-transformers/all-mpnet-base-v2"
 }
 ```
 
@@ -157,20 +157,21 @@ curl -X POST http://localhost:8002/v1/embeddings \
 docker build -t embedding-service:latest .
 
 # Run with defaults (host=0.0.0.0, port=8002)
-docker run -p 8002:8002 -v $(pwd)/data:/app/data embedding-service:latest
+# Note: A PostgreSQL instance with pgvector extension must be available
+docker run -p 8002:8002 embedding-service:latest
 
 # Override port
-docker run -p 9000:9000 -e PORT=9000 -v $(pwd)/data:/app/data embedding-service:latest
+docker run -p 9000:9000 -e PORT=9000 embedding-service:latest
 
 # Use IPv6/dual-stack
-docker run -p 8002:8002 -e HOST=:: -v $(pwd)/data:/app/data embedding-service:latest
+docker run -p 8002:8002 -e HOST=:: embedding-service:latest
 ```
 
 ## Testing
 
 ### Running Tests
 
-The service includes comprehensive test coverage (19 tests) using pytest with modern best practices.
+The service includes comprehensive test coverage using pytest with modern best practices.
 
 ```bash
 # Install with dev dependencies
@@ -203,22 +204,7 @@ pytest -k "embedding"
 
 ### Test Structure
 
-Tests use modern pytest patterns:
-- **Fixtures**: Centralized test data and mocks (equivalent to `beforeEach`)
-- **Parametrized tests**: Multiple scenarios tested efficiently
-- **Async support**: Full async/await testing with pytest-asyncio
-- **Mocking**: External dependencies (SentenceTransformer, ChromaDB) mocked for fast tests
-
-### Continuous Integration
-
-Add to your CI pipeline:
-
-```yaml
-- name: Run Tests
-  run: |
-    pip install -e ".[dev]"
-    pytest --cov=main --cov-report=xml
-```
+See [Testing Guidelines](../docs/testing-guidelines.md) for test patterns and conventions.
 
 ## Configuration
 
@@ -229,6 +215,12 @@ Add to your CI pipeline:
 | `HOST` | `0.0.0.0` | Server host (use `::` for IPv6/dual-stack) |
 | `PORT` | `8002` | Server port |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `PGHOST` | `localhost` | PostgreSQL host |
+| `PGPORT` | `5432` | PostgreSQL port |
+| `PGDATABASE` | `hcc-ai-assistant` | Database name |
+| `PGUSER` | `postgres` | Database user |
+| `PGPASSWORD` | - | Database password |
+| `PGSSLMODE` | `prefer` | SSL mode |
 
 **Note on HOST values:**
 - `0.0.0.0` - IPv4 only (default, works in most environments)
@@ -236,41 +228,23 @@ Add to your CI pipeline:
 
 ### Storage
 
-- **ChromaDB Data**: `/app/data/chroma/`
-- **Volume Mount**: Mount `/app/data` for persistent storage
+The service connects to a PostgreSQL database with the pgvector extension installed. Vector data is stored in PostgreSQL tables using the `vector(768)` column type for cosine similarity search. The `PG*` environment variables above configure the database connection.
 
 ## Deployment Architecture
 
-### Kubernetes/OpenShift (Sidecar)
-
-In production, this service runs as a **sidecar container** in the same pod as lightspeed-stack and mcp-discovery-service. All services communicate via `localhost`:
-
-- **Port**: 8002 (internal to pod)
-- **Access**: `http://localhost:8002` from other containers in the pod
-- **Startup Order**: embedding-service starts first (required by mcp-discovery-service)
-
-### Docker Compose (Simulated Sidecar)
-
-Uses `network_mode: "service:lightspeed-stack"` to share network namespace, simulating Kubernetes pod behavior.
+See [Architecture Guidelines](../docs/architecture-guidelines.md) for deployment architecture details.
 
 ## Performance
 
 - **Startup Time**: 5-10 seconds (model loading)
 - **Embedding Generation**: ~10-50ms per text (CPU), ~5ms (GPU)
 - **Vector Query**: ~5-20ms
-- **Memory**: ~1.5GB (model + ChromaDB)
+- **Memory**: ~1.5GB (model + pgvector)
 - **Concurrent Requests**: Supported via FastAPI async
 
 ## Resource Requirements
 
-**Minimum**:
-- CPU: 1 core
-- Memory: 1GB
-
-**Recommended**:
-- CPU: 2 cores
-- Memory: 2GB
-- Storage: 10GB for vector data
+See [Deployment Guidelines](../docs/deployment-guidelines.md) for resource requirements.
 
 ## Troubleshooting
 
@@ -278,9 +252,9 @@ Uses `network_mode: "service:lightspeed-stack"` to share network namespace, simu
 
 **Solution**: Ensure sufficient memory and internet connectivity during first startup (model download).
 
-### ChromaDB Errors
+### pgvector Connection Errors
 
-**Solution**: Check that `/app/data` is writable and has sufficient disk space.
+**Solution**: Verify that PostgreSQL is running and reachable using the `PG*` environment variables. Ensure the `pgvector` extension is installed (`CREATE EXTENSION IF NOT EXISTS vector;`).
 
 ### Out of Memory
 
