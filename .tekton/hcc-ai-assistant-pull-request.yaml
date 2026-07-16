@@ -216,6 +216,14 @@ spec:
         results:
         - name: TEST_OUTPUT
           description: Pytest test output
+        stepTemplate:
+          computeResources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
         steps:
         - name: use-trusted-artifact
           image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:4e39fb97f4444c2946944482df47b39c5bbc195c54c6560b0647635f553ab23d
@@ -225,67 +233,79 @@ spec:
           volumeMounts:
           - mountPath: /var/workdir
             name: workdir
-        - name: test-embedding-service
+        - name: run-tests
           image: registry.access.redhat.com/ubi9/python-312:latest
           workingDir: /var/workdir
           script: |
             #!/bin/bash
             set -e
-            echo "Running embedding-service tests (19 tests)..."
-            # Copy service to writable workspace
-            cp -r /var/workdir/source/embedding-service /var/workdir/embedding-service-test
-            cd /var/workdir/embedding-service-test
-            # Use pip for heavy dependencies (torch, etc) to avoid memory issues
-            pip install --quiet ".[dev]"
-            # Run tests
-            pytest -v || {
-              echo "Embedding service tests failed!"
+
+            failed=""
+
+            # Auto-discover testable services (directories with pyproject.toml containing pytest)
+            for pyproject in $(find /var/workdir/source -maxdepth 2 -name "pyproject.toml" -type f); do
+              dir=$(dirname "$pyproject")
+              svc_path="${dir#/var/workdir/source/}"
+
+              # Skip root-level pyproject.toml (we'll handle root tests separately)
+              if [ "$svc_path" = "." ]; then
+                continue
+              fi
+
+              # Check if pytest is in dev dependencies
+              if grep -q "pytest" "$pyproject"; then
+                svc_name=$(basename "$svc_path")
+                echo "========================================="
+                echo "Testing $svc_name..."
+                echo "========================================="
+
+                cp -r "/var/workdir/source/$svc_path" "/var/workdir/${svc_name}-test"
+                cd "/var/workdir/${svc_name}-test"
+
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v || failed="$failed $svc_name"
+                else
+                  pip install --quiet ".[dev]"
+                  pytest -v || failed="$failed $svc_name"
+                fi
+
+                cd /var/workdir
+              fi
+            done
+
+            # Run root-level tests if they exist
+            if ls /var/workdir/source/test_*.py 1> /dev/null 2>&1; then
+              echo "========================================="
+              echo "Testing root-level tests..."
+              echo "========================================="
+
+              cd /var/workdir/source
+
+              # Install root dependencies if needed
+              if [ -f "pyproject.toml" ]; then
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v test_*.py || failed="$failed root-tests"
+                else
+                  pip install --quiet -e ".[dev]"
+                  pytest -v test_*.py || failed="$failed root-tests"
+                fi
+              else
+                # Fallback: just try to run pytest
+                pytest -v test_*.py || failed="$failed root-tests"
+              fi
+
+              cd /var/workdir
+            fi
+
+            if [ -n "$failed" ]; then
+              echo "FAILED:$failed"
               exit 1
-            }
-            echo "Embedding service tests passed!"
-          volumeMounts:
-          - mountPath: /var/workdir
-            name: workdir
-        - name: test-mcp-discovery-service
-          image: registry.access.redhat.com/ubi9/python-312:latest
-          workingDir: /var/workdir
-          script: |
-            #!/bin/bash
-            set -e
-            echo "Running mcp-discovery-service tests (53 tests)..."
-            # Copy service to writable workspace
-            cp -r /var/workdir/source/mcp-discovery-service /var/workdir/mcp-discovery-service-test
-            cd /var/workdir/mcp-discovery-service-test
-            # Use pip for consistency with other services
-            pip install --quiet ".[dev]"
-            # Run tests
-            pytest -v || {
-              echo "MCP discovery service tests failed!"
-              exit 1
-            }
-            echo "MCP discovery service tests passed!"
-          volumeMounts:
-          - mountPath: /var/workdir
-            name: workdir
-        - name: test-post-pr-skill
-          image: registry.access.redhat.com/ubi9/python-312:latest
-          workingDir: /var/workdir
-          script: |
-            #!/bin/bash
-            set -e
-            echo "Running post-pr skill tests (35 tests)..."
-            # Copy skill to writable workspace
-            cp -r /var/workdir/source/.claude/skills/post-pr /var/workdir/post-pr-test
-            cd /var/workdir/post-pr-test
-            # Install dependencies with uv (including dev extras for pytest)
-            pip install --quiet uv
-            uv sync --frozen --all-extras
-            # Run tests
-            uv run pytest -v || {
-              echo "Post-PR skill tests failed!"
-              exit 1
-            }
-            echo "Post-PR skill tests passed!"
+            fi
+            echo "All tests passed!"
           volumeMounts:
           - mountPath: /var/workdir
             name: workdir

@@ -1,8 +1,13 @@
 import json
+import os
 
 import pytest
+import yaml
 
-from entrypoint import load_mcp_server_configs, merge_mcp_servers
+from entrypoint import (
+    load_mcp_server_configs,
+    merge_mcp_servers,
+)
 
 
 # ============================================================================
@@ -194,6 +199,65 @@ class TestMergeMcpServers:
         provider = base_run_config["providers"]["tool_runtime"][0]
         assert provider["config"]["url"] == "http://resolved-host:9999/mcp/"
 
+    def test_authorization_preserved_after_clowder_config(self, monkeypatch, base_run_config):
+        """Authorization access_rules must survive Clowder config application."""
+        from entrypoint import apply_clowder_config
+
+        stack_config = {
+            "conversation_cache": {"type": "sqlite", "sqlite": {"db_path": "/tmp/test.db"}},
+            "authorization": {
+                "access_rules": [
+                    {"role": "*", "actions": ["query", "list_conversations"]}
+                ]
+            },
+        }
+
+        class FakeDB:
+            hostname = "db-host"
+            port = 5432
+            name = "testdb"
+            username = "user"
+            password = "pass"
+            sslMode = "prefer"
+            rdsCa = None
+
+        class FakeClowder:
+            database = FakeDB()
+
+        apply_clowder_config(base_run_config, stack_config, FakeClowder())
+
+        # Authorization section must be preserved after Clowder config application
+        assert "authorization" in stack_config
+        assert len(stack_config["authorization"]["access_rules"]) == 1
+        assert stack_config["authorization"]["access_rules"][0]["role"] == "*"
+
+    def test_render_configs_preserves_yaml_access_rules(self, monkeypatch, tmp_path):
+        """render_configs must carry the YAML-defined access_rules through."""
+        from entrypoint import render_configs
+
+        monkeypatch.setattr("entrypoint.TEMPLATE_DIR", str(tmp_path))
+        monkeypatch.setattr("entrypoint.RUNTIME_DIR", str(tmp_path / "out"))
+        monkeypatch.delenv("CLOWDER_MCP_SERVER_CONFIGS", raising=False)
+
+        # Minimal run.yaml template
+        (tmp_path / "run.yaml").write_text(yaml.dump({"providers": {}}))
+
+        # Stack template with access_rules already defined (as in the real YAML)
+        stack = {
+            "authorization": {
+                "access_rules": [{"role": "*", "actions": ["query", "list_conversations"]}]
+            },
+        }
+        (tmp_path / "lightspeed-stack.yaml").write_text(yaml.dump(stack))
+
+        rendered = render_configs(clowder=None)
+
+        assert "authorization" in rendered
+        rules = rendered["authorization"]["access_rules"]
+        assert len(rules) == 1
+        assert rules[0]["role"] == "*"
+        assert "query" in rules[0]["actions"]
+
     def test_clowder_no_matching_endpoint(self, monkeypatch, base_run_config, base_stack_config):
         configs = {
             "my-server": {
@@ -217,3 +281,76 @@ class TestMergeMcpServers:
 
         server = base_stack_config["mcp_servers"][0]
         assert server["url"] == "http://fallback/mcp/"
+
+
+# ============================================================================
+# AUTHORIZATION CONFIG VALIDATION TESTS (RHCLOUD-48660)
+# ============================================================================
+
+# Actions required for the HCC AI Assistant to function.
+_REQUIRED_ACTIONS = {
+    "query",
+    "responses",
+    "streaming_query",
+    "get_conversation",
+    "list_conversations",
+    "delete_conversation",
+    "update_conversation",
+    "feedback",
+    "get_models",
+    "get_tools",
+    "info",
+}
+
+# Actions that bypass per-user conversation scoping — must NEVER appear in the
+# YAML access_rules.
+_DANGEROUS_ACTIONS = {
+    "admin",
+    "list_other_conversations",
+    "read_other_conversations",
+    "query_other_conversations",
+    "delete_other_conversations",
+}
+
+
+def _load_stack_yaml_access_rules():
+    """Load access_rules from the lightspeed-stack.yaml template."""
+    yaml_path = os.path.join(os.path.dirname(__file__), "lightspeed-stack.yaml")
+    with open(yaml_path) as f:
+        config = yaml.safe_load(f)
+    return config["authorization"]["access_rules"]
+
+
+class TestYamlAuthorizationRules:
+    """Validate that lightspeed-stack.yaml defines correct access_rules,
+    excluding dangerous cross-user actions (RHCLOUD-48660).
+    """
+
+    def test_has_wildcard_role(self):
+        """YAML should define access_rules with role '*'."""
+        rules = _load_stack_yaml_access_rules()
+        assert len(rules) == 1
+        assert rules[0]["role"] == "*"
+        assert len(rules[0]["actions"]) > 0
+
+    def test_excludes_dangerous_actions(self):
+        """No dangerous action must appear in the YAML access_rules."""
+        rules = _load_stack_yaml_access_rules()
+        granted = set(rules[0]["actions"])
+        dangerous = granted & _DANGEROUS_ACTIONS
+        assert not dangerous, (
+            f"YAML access_rules must not include dangerous actions: {dangerous}"
+        )
+
+    def test_includes_required_actions(self):
+        """All actions required for the chatbot must be present in YAML."""
+        rules = _load_stack_yaml_access_rules()
+        granted = set(rules[0]["actions"])
+        missing = _REQUIRED_ACTIONS - granted
+        assert not missing, f"YAML access_rules missing required actions: {missing}"
+
+    def test_actions_are_sorted(self):
+        """Actions in YAML should be alphabetically sorted for readability."""
+        rules = _load_stack_yaml_access_rules()
+        actions = rules[0]["actions"]
+        assert actions == sorted(actions)

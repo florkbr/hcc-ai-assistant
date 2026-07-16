@@ -158,6 +158,115 @@ spec:
       workspaces:
       - name: basic-auth
         workspace: git-auth
+    - name: pytest
+      params:
+      - name: SOURCE_ARTIFACT
+        value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
+      runAfter:
+      - clone-repository
+      taskSpec:
+        params:
+        - name: SOURCE_ARTIFACT
+          type: string
+        results:
+        - name: TEST_OUTPUT
+          description: Pytest test output
+        stepTemplate:
+          computeResources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+        steps:
+        - name: use-trusted-artifact
+          image: quay.io/redhat-appstudio/build-trusted-artifacts:latest@sha256:4e39fb97f4444c2946944482df47b39c5bbc195c54c6560b0647635f553ab23d
+          args:
+          - use
+          - $(params.SOURCE_ARTIFACT)=/var/workdir/source
+          volumeMounts:
+          - mountPath: /var/workdir
+            name: workdir
+        - name: run-tests
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          workingDir: /var/workdir
+          script: |
+            #!/bin/bash
+            set -e
+
+            failed=""
+
+            # Auto-discover testable services (directories with pyproject.toml containing pytest)
+            for pyproject in $(find /var/workdir/source -maxdepth 2 -name "pyproject.toml" -type f); do
+              dir=$(dirname "$pyproject")
+              svc_path="${dir#/var/workdir/source/}"
+
+              # Skip root-level pyproject.toml (we'll handle root tests separately)
+              if [ "$svc_path" = "." ]; then
+                continue
+              fi
+
+              # Check if pytest is in dev dependencies
+              if grep -q "pytest" "$pyproject"; then
+                svc_name=$(basename "$svc_path")
+                echo "========================================="
+                echo "Testing $svc_name..."
+                echo "========================================="
+
+                cp -r "/var/workdir/source/$svc_path" "/var/workdir/${svc_name}-test"
+                cd "/var/workdir/${svc_name}-test"
+
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v || failed="$failed $svc_name"
+                else
+                  pip install --quiet ".[dev]"
+                  pytest -v || failed="$failed $svc_name"
+                fi
+
+                cd /var/workdir
+              fi
+            done
+
+            # Run root-level tests if they exist
+            if ls /var/workdir/source/test_*.py 1> /dev/null 2>&1; then
+              echo "========================================="
+              echo "Testing root-level tests..."
+              echo "========================================="
+
+              cd /var/workdir/source
+
+              # Install root dependencies if needed
+              if [ -f "pyproject.toml" ]; then
+                if [ -f "uv.lock" ]; then
+                  pip install --quiet uv
+                  uv sync --frozen --all-extras
+                  uv run pytest -v test_*.py || failed="$failed root-tests"
+                else
+                  pip install --quiet -e ".[dev]"
+                  pytest -v test_*.py || failed="$failed root-tests"
+                fi
+              else
+                # Fallback: just try to run pytest
+                pytest -v test_*.py || failed="$failed root-tests"
+              fi
+
+              cd /var/workdir
+            fi
+
+            if [ -n "$failed" ]; then
+              echo "FAILED:$failed"
+              exit 1
+            fi
+            echo "All tests passed!"
+          volumeMounts:
+          - mountPath: /var/workdir
+            name: workdir
+        volumes:
+        - name: workdir
+          emptyDir: {}
     - name: prefetch-dependencies
       params:
       - name: input
